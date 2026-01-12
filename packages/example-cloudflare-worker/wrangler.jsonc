@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ducklings-worker",
+  "main": "dist/index.js",
+  "compatibility_date": "2026-01-11",
+
+  // Enable nodejs_compat for better compatibility
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Workers limits:
+  // - Free: 3MB code size, 128MB memory
+  // - Paid: 10MB code size, 128MB memory
+  // Note: DuckDB WASM is ~9.7MB gzipped, so requires paid plan
+
+  "build": {
+    "command": ""
+  },
+
+  // Include WASM files as modules
+  "rules": [
+    {
+      "type": "CompiledWasm",
+      "globs": ["**/*.wasm"],
+      "fallthrough": false
+    }
+  ]
+}

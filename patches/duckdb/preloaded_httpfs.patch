@@ -1,0 +1,29 @@
+diff --git a/src/include/duckdb/main/database.hpp b/src/include/duckdb/main/database.hpp
+index 1234567..abcdefg 100644
+--- a/src/include/duckdb/main/database.hpp
++++ b/src/include/duckdb/main/database.hpp
+@@ -17,6 +17,9 @@
+ #include "duckdb/main/extension_manager.hpp"
+
+ namespace duckdb {
++
++extern bool preloaded_httpfs;
++
+ class BufferManager;
+ class DatabaseManager;
+ class StorageManager;
+diff --git a/src/main/database.cpp b/src/main/database.cpp
+index 1234567..abcdefg 100644
+--- a/src/main/database.cpp
++++ b/src/main/database.cpp
+@@ -494,6 +494,10 @@ idx_t DuckDB::NumberOfThreads() {
+ }
+
+ bool DatabaseInstance::ExtensionIsLoaded(const string &name) {
++	auto extension_name = ExtensionHelper::GetExtensionName(name);
++	if (extension_name == "httpfs" && preloaded_httpfs) {
++		return true;
++	}
+ 	return extension_manager->ExtensionIsLoaded(name);
+ }
+

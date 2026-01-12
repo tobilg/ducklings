@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ducklings - Browser Example</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+            background: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #666;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #444;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #4a9eff;
+            box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+        }
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 0.625rem 1.25rem;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #4a9eff;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #3a8eef;
+        }
+        .btn-secondary {
+            background: #e8e8e8;
+            color: #333;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #d8d8d8;
+        }
+        #output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            min-height: 200px;
+            max-height: 500px;
+            overflow: auto;
+        }
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .status-loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .example-queries {
+            margin-top: 1rem;
+        }
+        .example-queries summary {
+            cursor: pointer;
+            color: #666;
+            font-size: 14px;
+        }
+        .example-queries ul {
+            margin: 0.5rem 0 0;
+            padding-left: 1.5rem;
+        }
+        .example-queries li {
+            margin: 0.25rem 0;
+        }
+        .example-queries code {
+            background: #f0f0f0;
+            padding: 0.125rem 0.375rem;
+            border-radius: 3px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .example-queries code:hover {
+            background: #e0e0e0;
+        }
+        .timing {
+            color: #888;
+            font-size: 12px;
+            margin-top: 0.5rem;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2rem;
+            gap: 1rem;
+        }
+        .header-left {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        .header-logo {
+            width: 100px;
+            height: auto;
+        }
+        .header-text h1 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+        }
+        .header-text .subtitle {
+            margin-bottom: 0;
+        }
+        .btn-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            background: #4a9eff;
+            color: white;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+        }
+        .btn-link:hover {
+            background: #3a8eef;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <img src="/logo.png" alt="Ducklings" class="header-logo">
+            <div class="header-text">
+                <h1>Ducklings</h1>
+                <p class="subtitle">Minimal DuckDB for browser and serverless environments</p>
+            </div>
+        </div>
+        <a href="https://ducklings-api.serverless-duckdb.com" target="_blank" class="btn-link">API Docs</a>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <label for="sql" style="margin: 0;">SQL Query</label>
+            <span id="status" class="status status-loading">
+                <span class="dot"></span>
+                <span>Initializing...</span>
+            </span>
+        </div>
+
+        <textarea id="sql">SELECT 42 AS answer, 'Hello from Ducklings!' AS message</textarea>
+
+        <div class="button-group">
+            <button id="run" class="btn-primary" disabled>Run Query</button>
+            <button id="runArrow" class="btn-primary" disabled>Run as Arrow</button>
+            <button id="remote" class="btn-secondary" disabled>Load Remote Parquet</button>
+            <button id="json" class="btn-secondary" disabled>JSON Functions</button>
+            <button id="clear" class="btn-secondary">Clear Output</button>
+        </div>
+
+        <details class="example-queries">
+            <summary>Example Queries</summary>
+            <ul>
+                <li><strong>Basic:</strong></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT * FROM range(10)</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT i, i*2 AS doubled FROM range(5) t(i)</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT 'Hello' || ' ' || 'World' AS greeting</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT current_timestamp AS now, version() AS version</code></li>
+                <li><code onclick="setQuery(this.textContent)">CREATE TABLE test (id INT, name VARCHAR); INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob'); SELECT * FROM test;</code></li>
+                <li><strong>JSON:</strong></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT json('{"name": "Alice", "age": 30}')</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT json_extract_string('{"user": "Bob"}', '$.user') AS user</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT '{"id": 1, "active": true}'::JSON->>'$.active' AS active</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT json_keys('{"a": 1, "b": 2, "c": 3}') AS keys</code></li>
+                <li><strong>Remote (httpfs):</strong></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT * FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/orders.parquet' LIMIT 5</code></li>
+            </ul>
+        </details>
+    </div>
+
+    <div class="card">
+        <label>Output</label>
+        <pre id="output">Initializing DuckDB WASM...</pre>
+        <div id="timing" class="timing"></div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

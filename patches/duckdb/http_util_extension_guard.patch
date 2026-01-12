@@ -1,0 +1,47 @@
+diff --git a/src/main/http/http_util.cpp b/src/main/http/http_util.cpp
+--- a/src/main/http/http_util.cpp
++++ b/src/main/http/http_util.cpp
+@@ -44,6 +44,8 @@ string HTTPHeaders::GetHeaderValue(const string &key) const {
+ 	return entry->second;
+ }
+
++#ifndef DISABLE_DUCKDB_REMOTE_INSTALL
++#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
+ unique_ptr<HTTPResponse> TransformResponse(duckdb_httplib::Result &res) {
+ 	auto status_code = HTTPUtil::ToStatusCode(res ? res->status : 0);
+ 	auto result = make_uniq<HTTPResponse>(status_code);
+@@ -60,6 +62,8 @@ unique_ptr<HTTPResponse> TransformResponse(duckdb_httplib::Result &res) {
+ 	}
+ 	return result;
+ }
++#endif
++#endif
+
+ HTTPResponse::HTTPResponse(HTTPStatusCode code) : status(code) {
+ }
+@@ -127,6 +131,8 @@ BaseRequest::BaseRequest(RequestType type, const string &url, const HTTPHeaders
+ 	HTTPUtil::DecomposeURL(url, path, proto_host_port);
+ }
+
++#ifndef DISABLE_DUCKDB_REMOTE_INSTALL
++#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
+ class HTTPLibClient : public HTTPClient {
+ public:
+ 	HTTPLibClient(HTTPParams &http_params, const string &proto_host_port) {
+@@ -220,9 +226,15 @@ private:
+ 	}
+ };
+
+-unique_ptr<HTTPClient> HTTPUtil::InitializeClient(HTTPParams &http_params, const string &proto_host_port) {
++unique_ptr<HTTPClient> HTTPUtil::InitializeClient(HTTPParams &http_params, const string &proto_host_port_in) {
+ 	return make_uniq<HTTPLibClient>(http_params, proto_host_port);
+ }
++#else
++unique_ptr<HTTPClient> HTTPUtil::InitializeClient(HTTPParams &, const string &) {
++	throw NotImplementedException("HTTP client not available - extension loading is disabled");
++}
++#endif
++#endif
+
+ unique_ptr<HTTPResponse> HTTPUtil::SendRequest(BaseRequest &request, unique_ptr<HTTPClient> &client) {
+ 	if (!client) {

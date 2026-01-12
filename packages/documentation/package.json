@@ -1,0 +1,15 @@
+{
+  "name": "@ducklings/documentation",
+  "version": "1.4.3",
+  "private": true,
+  "scripts": {
+    "build": "typedoc",
+    "preview": "npx serve dist",
+    "deploy": "pnpm run build && wrangler pages deploy"
+  },
+  "devDependencies": {
+    "typedoc": "^0.28.15",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.58.0"
+  }
+}

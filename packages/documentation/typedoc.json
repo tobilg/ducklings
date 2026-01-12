@@ -1,0 +1,31 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "Ducklings API",
+  "entryPoints": [
+    "../ducklings-browser",
+    "../ducklings-workers"
+  ],
+  "entryPointStrategy": "packages",
+  "out": "dist",
+  "readme": "./README.md",
+  "projectDocuments": [
+    "./guides/getting-started.md",
+    "./guides/browser-vs-workers.md",
+    "./guides/file-registration.md",
+    "./guides/streaming-results.md",
+    "./guides/arrow-integration.md",
+    "./guides/prepared-statements.md"
+  ],
+  "includeVersion": false,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "titleLink": "https://ducklings-api.serverless-duckdb.com",
+  "navigationLinks": {
+    "GitHub": "https://github.com/tobilg/ducklings",
+    "npm (browser)": "https://www.npmjs.com/package/@ducklings/browser",
+    "npm (workers)": "https://www.npmjs.com/package/@ducklings/workers"
+  },
+  "categorizeByGroup": true,
+  "categoryOrder": ["Database", "Connection", "Query Results", "File Operations", "Types", "*"]
+}

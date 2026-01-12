@@ -1,0 +1,10 @@
+[submodule "deps/duckdb"]
+	path = deps/duckdb
+	url = https://github.com/duckdb/duckdb.git
+    # Pin to v1.4.3
+
+[submodule "deps/duckdb-httpfs"]
+	path = deps/duckdb-httpfs
+	url = https://github.com/duckdb/duckdb-httpfs.git
+    # Match DuckDB v1.4.3 compatible version
+

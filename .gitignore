@@ -39,3 +39,54 @@
 
 # debug information files
 *.dwo
+
+# External projects (reference only)
+external-projects/
+
+# Tools (local only)
+tools/
+
+# Rust
+target/
+Cargo.lock
+
+# Build artifacts
+build/
+dist/
+
+# Node.js
+node_modules/
+*.log
+.pnpm-debug.log
+
+# Package generated files
+packages/*/dist/
+packages/*/node_modules/
+packages/ducklings-browser/src/wasm/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# TypeDoc
+docs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+.wrangler/
+.claude/
+plans/

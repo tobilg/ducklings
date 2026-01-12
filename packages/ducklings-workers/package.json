@@ -1,0 +1,73 @@
+{
+  "name": "@ducklings/workers",
+  "version": "1.4.3",
+  "description": "Minimal DuckDB WASM for Cloudflare Workers and serverless environments",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./wasm": "./dist/wasm/duckdb-workers.wasm",
+    "./wasm/*": "./dist/wasm/*"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup && pnpm postbuild",
+    "postbuild": "mkdir -p dist/wasm && cp ../../dist/duckdb-workers.js dist/wasm/ && cp ../../dist/duckdb-workers.wasm dist/wasm/",
+    "dev": "tsup --watch",
+    "test": "vitest run --reporter=dot",
+    "test:watch": "vitest --reporter=dot",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "format": "biome format --write src",
+    "typecheck": "tsc --noEmit",
+    "docs": "typedoc",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@uwdata/flechette": "^2.2.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "@cloudflare/workers-types": "^4.20260111.0",
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.0.16",
+    "tsup": "^8.5.1",
+    "typedoc": "^0.28.15",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  },
+  "keywords": [
+    "duckdb",
+    "wasm",
+    "webassembly",
+    "sql",
+    "database",
+    "cloudflare-workers",
+    "serverless",
+    "asyncify"
+  ],
+  "author": "tobilg",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tobilg/ducklings",
+    "directory": "packages/ducklings-workers"
+  },
+  "bugs": {
+    "url": "https://github.com/tobilg/ducklings/issues"
+  },
+  "homepage": "https://github.com/tobilg/ducklings#readme",
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

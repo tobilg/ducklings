@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: 'Version suffix for dev release (e.g., -dev.1, -alpha.0, -beta.1). Leave empty for stable release.'
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: 'Dry run (no publish)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  EMSDK_VERSION: '3.1.50'
+  NODE_VERSION: '20'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Cache DuckDB build
+        uses: actions/cache@v4
+        with:
+          path: build/emscripten
+          key: duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('deps/duckdb/**', 'scripts/build-duckdb.sh', 'cmake/**') }}
+          restore-keys: |
+            duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+            duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+
+      - name: Install binaryen
+        run: sudo apt-get install -y binaryen
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Determine version and npm tag
+        id: version
+        run: |
+          # Get base version from Makefile (without 'v' prefix)
+          MAKEFILE_VERSION=$(grep '^DUCKDB_VERSION' Makefile | sed 's/.*:= *v//')
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push: extract version from tag and validate against Makefile
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+
+            if [ "$TAG_VERSION" != "$MAKEFILE_VERSION" ]; then
+              echo "::error::Tag version ($TAG_VERSION) doesn't match DUCKDB_VERSION in Makefile ($MAKEFILE_VERSION)"
+              echo "::error::Update DUCKDB_VERSION in Makefile to v$TAG_VERSION before tagging"
+              exit 1
+            fi
+
+            VERSION="$TAG_VERSION"
+            SUFFIX=""
+          else
+            # Manual dispatch: use Makefile version + optional suffix
+            VERSION="$MAKEFILE_VERSION"
+            if [ -n "${{ github.event.inputs.version_suffix }}" ]; then
+              SUFFIX="${{ github.event.inputs.version_suffix }}"
+              VERSION="${VERSION}${SUFFIX}"
+            else
+              SUFFIX=$(grep '^VERSION_SUFFIX' Makefile | sed 's/.*:= *//')
+              VERSION="${VERSION}${SUFFIX}"
+            fi
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Determine npm tag: 'dev' for prerelease, 'latest' for stable
+          if [[ "$VERSION" == *"-dev"* ]] || [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            NPM_TAG="dev"
+          else
+            NPM_TAG="latest"
+          fi
+          echo "npm_tag=$NPM_TAG" >> $GITHUB_OUTPUT
+
+          echo "Release version: $VERSION (npm tag: $NPM_TAG)"
+
+      - name: Build browser WASM
+        run: make duckdb-browser
+
+      - name: Build workers WASM
+        run: make duckdb-workers
+
+      - name: Sync package versions
+        run: make sync-versions VERSION_SUFFIX="${{ github.event.inputs.version_suffix }}"
+
+      - name: Install dependencies
+        run: |
+          cd packages/ducklings-browser && pnpm install --frozen-lockfile
+          cd ../ducklings-workers && pnpm install --frozen-lockfile
+
+      - name: Build browser package
+        run: |
+          cd packages/ducklings-browser
+          pnpm build
+
+      - name: Build workers package
+        run: |
+          cd packages/ducklings-workers
+          pnpm build
+
+      - name: Type check
+        run: |
+          cd packages/ducklings-browser && pnpm typecheck
+          cd ../ducklings-workers && pnpm typecheck
+
+      - name: Publish @ducklings/browser
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          cd packages/ducklings-browser
+          npm publish --access public --tag ${{ steps.version.outputs.npm_tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @ducklings/workers
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          cd packages/ducklings-workers
+          npm publish --access public --tag ${{ steps.version.outputs.npm_tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: ${{ github.event_name == 'push' && github.event.inputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/duckdb.wasm
+            dist/duckdb-workers.wasm
+          prerelease: ${{ steps.version.outputs.npm_tag == 'dev' }}
+          body: |
+            ## Ducklings v${{ steps.version.outputs.version }}
+
+            ### Packages
+            - [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) - Browser version
+            - [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) - Cloudflare Workers version
+
+            ### Installation
+            ```bash
+            # Browser
+            npm install @ducklings/browser@${{ steps.version.outputs.version }}
+
+            # Cloudflare Workers
+            npm install @ducklings/workers@${{ steps.version.outputs.version }}
+            ```
+
+            ### Usage
+
+            **Browser:**
+            ```typescript
+            import { init, DuckDB } from '@ducklings/browser';
+
+            await init();
+            const db = new DuckDB();
+            const conn = db.connect();
+            const result = conn.query('SELECT 42 as answer');
+            ```
+
+            **Cloudflare Workers:**
+            ```typescript
+            import { init, DuckDB } from '@ducklings/workers';
+            import wasmModule from '@ducklings/workers/wasm';
+
+            await init({ wasmModule });
+            const db = new DuckDB();
+            const conn = db.connect();
+            const result = await conn.query('SELECT 42 as answer');
+            ```
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**npm tag:** ${{ steps.version.outputs.npm_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry run:** ${{ github.event.inputs.dry_run == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages:" >> $GITHUB_STEP_SUMMARY
+          echo "- @ducklings/browser@${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- @ducklings/workers@${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Package sizes:" >> $GITHUB_STEP_SUMMARY
+          echo "- duckdb.wasm: $(du -h dist/duckdb.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "- duckdb-workers.wasm: $(du -h dist/duckdb-workers.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.version.outputs.npm_tag }}" = "dev" ]; then
+            echo "### Install dev version:" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "npm install @ducklings/browser@dev" >> $GITHUB_STEP_SUMMARY
+            echo "npm install @ducklings/workers@dev" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi

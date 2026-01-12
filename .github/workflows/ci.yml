@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/*]
+  pull_request:
+    branches: [main]
+
+env:
+  EMSDK_VERSION: '3.1.50'
+  NODE_VERSION: '20'
+
+jobs:
+  # Build WASM (browser and workers)
+  build-wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Cache DuckDB build
+        id: cache-duckdb
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/emscripten
+          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('deps/duckdb/**', 'scripts/build-duckdb.sh', 'cmake/**') }}
+          restore-keys: |
+            duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get install -y binaryen
+
+      - name: Build browser WASM
+        run: make duckdb-browser
+
+      - name: Build workers WASM
+        run: make duckdb-workers
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: |
+            dist/duckdb.js
+            dist/duckdb.wasm
+            dist/duckdb-workers.js
+            dist/duckdb-workers.wasm
+          retention-days: 7
+
+  # Build and test TypeScript packages
+  build-typescript:
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: dist
+
+      - name: Install dependencies (browser package)
+        run: cd packages/ducklings-browser && pnpm install --frozen-lockfile
+
+      - name: Install dependencies (workers package)
+        run: cd packages/ducklings-workers && pnpm install --frozen-lockfile
+
+      - name: Build browser package
+        run: |
+          cd packages/ducklings-browser
+          pnpm build
+
+      - name: Build workers package
+        run: |
+          cd packages/ducklings-workers
+          pnpm build
+
+      - name: Type check browser package
+        run: cd packages/ducklings-browser && pnpm typecheck
+
+      - name: Type check workers package
+        run: cd packages/ducklings-workers && pnpm typecheck
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            packages/ducklings-browser/dist
+            packages/ducklings-workers/dist
+          retention-days: 7
+
+  # Lint check
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: |
+          cd packages/ducklings-browser && pnpm install --frozen-lockfile
+          cd ../ducklings-workers && pnpm install --frozen-lockfile
+
+      - name: Lint browser package
+        run: cd packages/ducklings-browser && pnpm lint || true
+
+      - name: Lint workers package
+        run: cd packages/ducklings-workers && pnpm lint || true
