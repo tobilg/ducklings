@@ -1,4 +1,4 @@
-# duckdb-wasm-nano Makefile
+# ducklings Makefile
 # Build orchestration for DuckDB WASM compilation using Emscripten
 
 BUILD_DIR := build
@@ -96,7 +96,7 @@ example:
 
 # Help
 help:
-	@echo "duckdb-wasm-nano build system (Emscripten)"
+	@echo "ducklings build system (Emscripten)"
 	@echo ""
 	@echo "Targets:"
 	@echo "  all                - Build everything (deps, duckdb, typescript)"

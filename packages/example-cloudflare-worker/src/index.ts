@@ -12,7 +12,7 @@
  */
 
 // Use the workers package which includes Asyncify for async fetch() support
-import { init, DuckDB, version, tableToIPC, type Connection } from '@ducklings/workers';
+import { init, DuckDB, version, tableToIPC, AccessMode, type Connection } from '@ducklings/workers';
 // Import the workers-specific WASM module (resolved by vite plugin)
 import wasmModule from '@ducklings/workers/wasm';
 
@@ -45,7 +45,10 @@ async function ensureInitialized(env: Env): Promise<void> {
     await init({ wasmModule });
 
     // Create database and connection
-    db = new DuckDB();
+    db = new DuckDB({
+      accessMode: AccessMode.READ_WRITE,
+      lockConfiguration: true,
+    });
     conn = db.connect();
 
     // Create R2 secret if env vars are set

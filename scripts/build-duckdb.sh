@@ -499,7 +499,11 @@ MAINEOF
         '_duckdb_value_date', \
         '_duckdb_value_timestamp', \
         '_duckdb_wasm_httpfs_init', \
-        '_duckdb_wasm_clear_bindings' \
+        '_duckdb_wasm_clear_bindings', \
+        '_duckdb_create_config', \
+        '_duckdb_set_config', \
+        '_duckdb_destroy_config', \
+        '_duckdb_open_ext' \
     ]"
 
     # Prepare target-specific defines

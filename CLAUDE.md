@@ -24,7 +24,7 @@ The project publishes two npm packages:
 ## Project Structure
 
 ```
-duckdb-wasm-nano/
+ducklings/
 ├── Makefile                       # Build orchestration
 ├── deps/                          # Git submodules
 │   ├── duckdb/                    # DuckDB v1.4.3 (C++ source)

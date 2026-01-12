@@ -203,6 +203,62 @@ const conn = db.connect();
 db.close();
 ```
 
+### Security Configuration
+
+Configure database security settings using `DuckDBConfig`:
+
+```typescript
+import { DuckDB, AccessMode } from '@ducklings/workers';
+
+// Default configuration (secure defaults)
+const db = new DuckDB();
+// Equivalent to:
+// new DuckDB({
+//   accessMode: AccessMode.AUTOMATIC,
+//   enableExternalAccess: true,
+//   lockConfiguration: true,
+// });
+
+// Read-only mode - prevents any data modification
+const readOnlyDb = new DuckDB({
+  accessMode: AccessMode.READ_ONLY,
+});
+
+// Disable external access (disables httpfs)
+const isolatedDb = new DuckDB({
+  enableExternalAccess: false,
+});
+
+// Allow runtime config changes via SQL
+const flexibleDb = new DuckDB({
+  lockConfiguration: false,
+});
+
+// Custom configuration options
+const customDb = new DuckDB({
+  customConfig: {
+    threads: '1',
+  },
+});
+```
+
+#### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `accessMode` | `AccessMode` | `AUTOMATIC` | Database access mode: `AUTOMATIC`, `READ_ONLY`, or `READ_WRITE` |
+| `enableExternalAccess` | `boolean` | `true` | Enable httpfs and file I/O. Set to `false` to prevent all external data access |
+| `lockConfiguration` | `boolean` | `true` | Lock configuration after startup. Prevents `SET` commands via SQL |
+| `customConfig` | `Record<string, string>` | `{}` | Custom DuckDB configuration options |
+
+#### Access Modes
+
+| Mode | Description |
+|------|-------------|
+| `AccessMode.AUTOMATIC` | DuckDB determines mode (resolves to `READ_WRITE` for in-memory) |
+| `AccessMode.READ_ONLY` | All write operations blocked |
+| `AccessMode.READ_WRITE` | Allow both reads and writes |
+
 ### Connection Class
 
 Both packages have an async API. All query methods return Promises.
@@ -516,7 +572,7 @@ Result: **~5.7MB gzipped** for browser, **~9.7MB gzipped** for workers (with Par
 ```bash
 # Clone with submodules
 git clone --recursive https://github.com/tobilg/ducklings.git
-cd duckdb-wasm-nano
+cd ducklings
 
 # Install dependencies
 pnpm install
@@ -693,7 +749,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 ### Project Structure
 
 ```
-duckdb-wasm-nano/
+ducklings/
 ├── Makefile                       # Build orchestration
 ├── deps/                          # Git submodules
 │   └── duckdb/                    # DuckDB v1.4.3

@@ -63,6 +63,8 @@
 export {
   DuckDBType,
   type DuckDBTypeId,
+  AccessMode,
+  type DuckDBConfig,
   type ColumnInfo,
   type InitOptions,
   type FileInfo,

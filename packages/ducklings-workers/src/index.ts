@@ -79,6 +79,54 @@ export const DuckDBType = {
 export type DuckDBTypeId = (typeof DuckDBType)[keyof typeof DuckDBType];
 
 /**
+ * Database access mode.
+ * @category Configuration
+ */
+export enum AccessMode {
+  /** DuckDB determines mode based on context (resolves to READ_WRITE for in-memory) */
+  AUTOMATIC = 'automatic',
+  /** Read-only mode - all write operations are blocked */
+  READ_ONLY = 'read_only',
+  /** Read-write mode - allows both reads and writes */
+  READ_WRITE = 'read_write',
+}
+
+/**
+ * DuckDB configuration options.
+ * @category Configuration
+ */
+export interface DuckDBConfig {
+  /**
+   * Database access mode.
+   * Use READ_ONLY to prevent any data modification.
+   * @default AccessMode.AUTOMATIC
+   */
+  accessMode?: AccessMode;
+
+  /**
+   * Enable external access (file I/O, httpfs, etc.).
+   * Set to false to prevent all external data access.
+   * WARNING: Setting to false will disable httpfs functionality.
+   * @default true
+   */
+  enableExternalAccess?: boolean;
+
+  /**
+   * Lock configuration after startup.
+   * Prevents runtime configuration changes via SQL SET commands.
+   * @default true (secure default)
+   */
+  lockConfiguration?: boolean;
+
+  /**
+   * Custom configuration options.
+   * Key-value pairs passed directly to duckdb_set_config.
+   * @see https://duckdb.org/docs/configuration/overview
+   */
+  customConfig?: Record<string, string>;
+}
+
+/**
  * Error thrown by DuckDB operations.
  * @category Types
  */
@@ -95,6 +143,184 @@ export class DuckDBError extends Error {
       Error.captureStackTrace(this, DuckDBError);
     }
   }
+}
+
+/**
+ * Options for SQL sanitization.
+ * @category Security
+ */
+export interface SanitizeSqlOptions {
+  /** Allow PRAGMA statements (default: false) */
+  allowPragma?: boolean;
+  /** Allow COPY ... TO statements (default: false) */
+  allowCopyTo?: boolean;
+  /** Allow EXPORT DATABASE statements (default: false) */
+  allowExportDatabase?: boolean;
+  /** Allow duckdb_secrets() function (default: false) */
+  allowSecretsFunction?: boolean;
+}
+
+/**
+ * Result of SQL sanitization check.
+ * @category Security
+ */
+export interface SanitizeResult {
+  /** Whether the SQL is considered safe */
+  safe: boolean;
+  /** The original SQL string */
+  sql: string;
+  /** Reason why the SQL was blocked (if unsafe) */
+  reason?: string;
+  /** The pattern that matched (if unsafe) */
+  matchedPattern?: string;
+}
+
+/**
+ * Strips SQL comments to prevent bypass attempts.
+ * @internal
+ */
+function stripSqlComments(sql: string): string {
+  // Remove /* ... */ block comments (non-greedy)
+  let result = sql.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  // Remove -- line comments
+  result = result.replace(/--[^\n\r]*/g, ' ');
+  // Remove # line comments (MySQL-style, supported by DuckDB)
+  result = result.replace(/#[^\n\r]*/g, ' ');
+  return result;
+}
+
+/**
+ * Dangerous SQL patterns to block.
+ * @internal
+ */
+const DANGEROUS_PATTERNS = {
+  secretsFunction: {
+    pattern: /\bduckdb_secrets\s*\(/i,
+    message: 'Access to duckdb_secrets() is not allowed',
+  },
+  pragma: {
+    pattern: /^\s*PRAGMA\b/im,
+    message: 'PRAGMA statements are not allowed',
+  },
+  copyTo: {
+    pattern: /\bCOPY\b[\s\S]+?\bTO\b\s+['"`]/i,
+    message: 'COPY ... TO statements are not allowed',
+  },
+  exportDatabase: {
+    pattern: /\bEXPORT\s+DATABASE\b/i,
+    message: 'EXPORT DATABASE statements are not allowed',
+  },
+} as const;
+
+/**
+ * Checks if a SQL statement contains dangerous patterns.
+ *
+ * This function does not throw - it returns a result object indicating
+ * whether the SQL is safe or not. Use this when you want to handle
+ * unsafe SQL yourself.
+ *
+ * @category Security
+ * @param sql - The SQL statement to check
+ * @param options - Options to selectively allow certain patterns
+ * @returns A SanitizeResult object with safety status
+ *
+ * @example
+ * ```typescript
+ * const result = checkSql("SELECT * FROM duckdb_secrets()");
+ * if (!result.safe) {
+ *   console.log(`Blocked: ${result.reason}`);
+ * }
+ * ```
+ */
+export function checkSql(sql: string, options: SanitizeSqlOptions = {}): SanitizeResult {
+  // Strip comments before checking patterns
+  const strippedSql = stripSqlComments(sql);
+
+  // Check each pattern unless explicitly allowed
+  if (!options.allowSecretsFunction && DANGEROUS_PATTERNS.secretsFunction.pattern.test(strippedSql)) {
+    return {
+      safe: false,
+      sql,
+      reason: DANGEROUS_PATTERNS.secretsFunction.message,
+      matchedPattern: 'duckdb_secrets()',
+    };
+  }
+
+  if (!options.allowPragma && DANGEROUS_PATTERNS.pragma.pattern.test(strippedSql)) {
+    return {
+      safe: false,
+      sql,
+      reason: DANGEROUS_PATTERNS.pragma.message,
+      matchedPattern: 'PRAGMA',
+    };
+  }
+
+  if (!options.allowCopyTo && DANGEROUS_PATTERNS.copyTo.pattern.test(strippedSql)) {
+    return {
+      safe: false,
+      sql,
+      reason: DANGEROUS_PATTERNS.copyTo.message,
+      matchedPattern: 'COPY ... TO',
+    };
+  }
+
+  if (!options.allowExportDatabase && DANGEROUS_PATTERNS.exportDatabase.pattern.test(strippedSql)) {
+    return {
+      safe: false,
+      sql,
+      reason: DANGEROUS_PATTERNS.exportDatabase.message,
+      matchedPattern: 'EXPORT DATABASE',
+    };
+  }
+
+  return { safe: true, sql };
+}
+
+/**
+ * Sanitizes a SQL statement by checking for dangerous patterns.
+ *
+ * This function throws a DuckDBError if the SQL contains dangerous patterns.
+ * Use this in request handlers to automatically reject unsafe queries.
+ *
+ * **Blocked patterns:**
+ * - `duckdb_secrets()` - Exposes database credentials
+ * - `PRAGMA` - Can modify database settings
+ * - `COPY ... TO` - Writes files to disk (COPY FROM is allowed)
+ * - `EXPORT DATABASE` - Exports database to files
+ *
+ * Note: SET commands are blocked separately by `lockConfiguration: true` in DuckDBConfig.
+ *
+ * @category Security
+ * @param sql - The SQL statement to sanitize
+ * @param options - Options to selectively allow certain patterns
+ * @returns The original SQL if safe
+ * @throws DuckDBError with code 'SANITIZE_ERROR' if dangerous patterns detected
+ *
+ * @example
+ * ```typescript
+ * import { sanitizeSql, DuckDBError } from '@ducklings/workers';
+ *
+ * // In a request handler
+ * try {
+ *   const safeSql = sanitizeSql(userInput);
+ *   const result = await conn.query(safeSql);
+ *   return Response.json({ data: result });
+ * } catch (e) {
+ *   if (e instanceof DuckDBError && e.code === 'SANITIZE_ERROR') {
+ *     return Response.json({ error: e.message }, { status: 400 });
+ *   }
+ *   throw e;
+ * }
+ * ```
+ */
+export function sanitizeSql(sql: string, options: SanitizeSqlOptions = {}): string {
+  const result = checkSql(sql, options);
+
+  if (!result.safe) {
+    throw new DuckDBError(result.reason!, 'SANITIZE_ERROR', sql);
+  }
+
+  return sql;
 }
 
 /**
@@ -1226,15 +1452,21 @@ export class StreamingResult implements Iterable<DataChunk> {
  * @category Database
  * @example
  * ```typescript
- * import { init, DuckDB } from '@ducklings/workers';
+ * import { init, DuckDB, AccessMode } from '@ducklings/workers';
  * import wasmModule from '@ducklings/workers/wasm';
  *
  * await init({ wasmModule });
  *
+ * // Default configuration (httpfs enabled, config locked)
  * const db = new DuckDB();
- * const conn = db.connect();
  *
- * // All queries are async
+ * // Or with custom security configuration
+ * const secureDb = new DuckDB({
+ *   accessMode: AccessMode.READ_ONLY,
+ *   lockConfiguration: true,
+ * });
+ *
+ * const conn = db.connect();
  * const result = await conn.query('SELECT 42 as answer');
  * console.log(result);
  *
@@ -1246,33 +1478,150 @@ export class DuckDB {
   private dbPtr: number = 0;
   private closed: boolean = false;
 
-  constructor() {
+  /**
+   * Creates a new DuckDB database instance.
+   *
+   * @param config - Optional configuration options
+   */
+  constructor(config: DuckDBConfig = {}) {
     if (!module) {
       throw new DuckDBError('DuckDB WASM not initialized. Call init() first.');
     }
 
-    const dbPtrPtr = module._malloc(4);
-    try {
-      const result = module.ccall(
-        'duckdb_open',
-        'number',
-        ['string', 'number'],
-        [':memory:', dbPtrPtr],
-      ) as number;
+    // Store module reference for use in closures
+    const mod = module;
 
-      if (result !== 0) {
-        throw new DuckDBError('Failed to open DuckDB database');
+    // Apply defaults
+    const finalConfig = {
+      accessMode: config.accessMode ?? AccessMode.AUTOMATIC,
+      enableExternalAccess: config.enableExternalAccess ?? true,
+      lockConfiguration: config.lockConfiguration ?? true,
+      customConfig: config.customConfig ?? {},
+    };
+
+    // Create config object
+    const configPtrPtr = mod._malloc(4);
+    const result = mod.ccall(
+      'duckdb_create_config',
+      'number',
+      ['number'],
+      [configPtrPtr],
+    ) as number;
+
+    if (result !== 0) {
+      mod._free(configPtrPtr);
+      throw new DuckDBError('Failed to create DuckDB configuration');
+    }
+
+    const configPtr = mod.getValue(configPtrPtr, 'i32');
+    mod._free(configPtrPtr);
+
+    try {
+      // Helper to set config option
+      const setConfig = (name: string, value: string) => {
+        const setResult = mod.ccall(
+          'duckdb_set_config',
+          'number',
+          ['number', 'string', 'string'],
+          [configPtr, name, value],
+        ) as number;
+        if (setResult !== 0) {
+          throw new DuckDBError(`Failed to set config option: ${name}`);
+        }
+      };
+
+      // Apply access mode
+      if (finalConfig.accessMode !== AccessMode.AUTOMATIC) {
+        setConfig('access_mode', finalConfig.accessMode);
       }
 
-      this.dbPtr = module.getValue(dbPtrPtr, '*');
-      module.ccall('duckdb_wasm_httpfs_init', null, ['number'], [this.dbPtr]);
+      // Apply external access setting
+      if (finalConfig.enableExternalAccess === false) {
+        setConfig('enable_external_access', 'false');
+      }
+
+      // Apply custom config options
+      for (const [key, value] of Object.entries(finalConfig.customConfig)) {
+        setConfig(key, value);
+      }
+
+      // Open database with config
+      const dbPtrPtr = mod._malloc(4);
+      const errorPtrPtr = mod._malloc(4);
+
+      try {
+        const openResult = mod.ccall(
+          'duckdb_open_ext',
+          'number',
+          ['string', 'number', 'number', 'number'],
+          [':memory:', dbPtrPtr, configPtr, errorPtrPtr],
+        ) as number;
+
+        if (openResult !== 0) {
+          const errorPtr = mod.getValue(errorPtrPtr, 'i32');
+          const errorMsg = errorPtr ? mod.UTF8ToString(errorPtr) : 'Unknown error';
+          throw new DuckDBError(`Failed to open database: ${errorMsg}`);
+        }
+
+        this.dbPtr = mod.getValue(dbPtrPtr, 'i32');
+      } finally {
+        mod._free(dbPtrPtr);
+        mod._free(errorPtrPtr);
+      }
+
+      // Initialize httpfs (only if external access enabled)
+      if (finalConfig.enableExternalAccess !== false) {
+        mod.ccall('duckdb_wasm_httpfs_init', null, ['number'], [this.dbPtr]);
+      }
+
+      // Lock configuration (secure default)
+      if (finalConfig.lockConfiguration !== false) {
+        // Use direct ccall for synchronous execution during construction
+        const connPtrPtr = mod._malloc(4);
+        try {
+          const connResult = mod.ccall(
+            'duckdb_connect',
+            'number',
+            ['number', 'number'],
+            [this.dbPtr, connPtrPtr],
+          ) as number;
+
+          if (connResult === 0) {
+            const connPtr = mod.getValue(connPtrPtr, 'i32');
+            const resultPtr = mod._malloc(64);
+            try {
+              mod.ccall(
+                'duckdb_query',
+                'number',
+                ['number', 'string', 'number'],
+                [connPtr, 'SET lock_configuration = true', resultPtr],
+              );
+              mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
+            } finally {
+              mod._free(resultPtr);
+            }
+            mod.ccall('duckdb_disconnect', null, ['number'], [connPtrPtr]);
+          }
+        } finally {
+          mod._free(connPtrPtr);
+        }
+      }
     } finally {
-      module._free(dbPtrPtr);
+      // Destroy config object
+      const configPtrPtrForDestroy = mod._malloc(4);
+      mod.setValue(configPtrPtrForDestroy, configPtr, 'i32');
+      mod.ccall('duckdb_destroy_config', null, ['number'], [configPtrPtrForDestroy]);
+      mod._free(configPtrPtrForDestroy);
     }
   }
 
-  static async create(): Promise<DuckDB> {
-    return new DuckDB();
+  /**
+   * Creates a new DuckDB database instance asynchronously.
+   *
+   * @param config - Optional configuration options
+   */
+  static async create(config?: DuckDBConfig): Promise<DuckDB> {
+    return new DuckDB(config);
   }
 
   connect(): Connection {

@@ -5,14 +5,15 @@
  * @packageDocumentation
  */
 
-import type { EmscriptenModule, ColumnInfo, DuckDBTypeId } from '../types.js';
-import { DuckDBType } from '../types.js';
+import type { EmscriptenModule, ColumnInfo, DuckDBTypeId, DuckDBConfig } from '../types.js';
+import { DuckDBType, AccessMode } from '../types.js';
 import {
   WorkerRequestType,
   WorkerResponseType,
   type WorkerRequest,
   type WorkerResponse,
   type InstantiateRequest,
+  type OpenRequest,
   type QueryRequest,
   type QueryArrowRequest,
   type QueryStreamingRequest,
@@ -121,7 +122,7 @@ export class DuckDBDispatcher {
           break;
 
         case WorkerRequestType.OPEN:
-          this.handleOpen(messageId);
+          this.handleOpen(messageId, data as OpenRequest);
           break;
 
         case WorkerRequestType.CLOSE:
@@ -358,31 +359,147 @@ export class DuckDBDispatcher {
     this.postResponse(requestId, WorkerResponseType.VERSION, { version });
   }
 
-  private handleOpen(requestId: number): void {
+  private handleOpen(requestId: number, data?: OpenRequest): void {
     const mod = this.getModule();
+    const config = data?.config ?? {};
 
-    // Allocate space for database pointer
-    const dbPtrPtr = mod._malloc(4);
+    // Apply defaults
+    const finalConfig = {
+      accessMode: config.accessMode ?? AccessMode.AUTOMATIC,
+      enableExternalAccess: config.enableExternalAccess ?? true,
+      lockConfiguration: config.lockConfiguration ?? true,
+      customConfig: config.customConfig ?? {},
+    };
+
+    // Create config object
+    const configPtrPtr = mod._malloc(4);
+    const createResult = mod.ccall(
+      'duckdb_create_config',
+      'number',
+      ['number'],
+      [configPtrPtr],
+    ) as number;
+
+    if (createResult !== 0) {
+      mod._free(configPtrPtr);
+      throw new Error('Failed to create DuckDB configuration');
+    }
+
+    const configPtr = mod.getValue(configPtrPtr, 'i32');
+    mod._free(configPtrPtr);
+
     try {
-      const result = mod.ccall(
-        'duckdb_open',
-        'number',
-        ['string', 'number'],
-        [':memory:', dbPtrPtr],
-      ) as number;
+      // Helper to set config option
+      const setConfig = (name: string, value: string) => {
+        const setResult = mod.ccall(
+          'duckdb_set_config',
+          'number',
+          ['number', 'string', 'string'],
+          [configPtr, name, value],
+        ) as number;
+        if (setResult !== 0) {
+          throw new Error(`Failed to set config option: ${name}`);
+        }
+      };
 
-      if (result !== 0) {
-        throw new Error('Failed to open DuckDB database');
+      // Apply access mode
+      if (finalConfig.accessMode !== AccessMode.AUTOMATIC) {
+        setConfig('access_mode', finalConfig.accessMode);
       }
 
-      this.dbPtr = mod.getValue(dbPtrPtr, '*');
+      // Apply external access setting
+      if (finalConfig.enableExternalAccess === false) {
+        setConfig('enable_external_access', 'false');
+      }
 
-      // Initialize httpfs extension
-      mod.ccall('duckdb_wasm_httpfs_init', null, ['number'], [this.dbPtr]);
+      // Apply custom config options
+      for (const [key, value] of Object.entries(finalConfig.customConfig)) {
+        setConfig(key, value);
+      }
+
+      // Open database with config
+      const dbPtrPtr = mod._malloc(4);
+      const errorPtrPtr = mod._malloc(4);
+
+      try {
+        const openResult = mod.ccall(
+          'duckdb_open_ext',
+          'number',
+          ['string', 'number', 'number', 'number'],
+          [':memory:', dbPtrPtr, configPtr, errorPtrPtr],
+        ) as number;
+
+        if (openResult !== 0) {
+          const errorPtr = mod.getValue(errorPtrPtr, 'i32');
+          const errorMsg = errorPtr ? mod.UTF8ToString(errorPtr) : 'Unknown error';
+          throw new Error(`Failed to open database: ${errorMsg}`);
+        }
+
+        this.dbPtr = mod.getValue(dbPtrPtr, 'i32');
+      } finally {
+        mod._free(dbPtrPtr);
+        mod._free(errorPtrPtr);
+      }
+
+      // Initialize httpfs (only if external access enabled)
+      if (finalConfig.enableExternalAccess !== false) {
+        mod.ccall('duckdb_wasm_httpfs_init', null, ['number'], [this.dbPtr]);
+      }
+
+      // Lock configuration (secure default)
+      if (finalConfig.lockConfiguration !== false) {
+        this.executeSQLInternal('SET lock_configuration = true');
+      }
 
       this.postOK(requestId);
     } finally {
-      mod._free(dbPtrPtr);
+      // Destroy config object
+      const configPtrPtrForDestroy = mod._malloc(4);
+      mod.setValue(configPtrPtrForDestroy, configPtr, 'i32');
+      mod.ccall('duckdb_destroy_config', null, ['number'], [configPtrPtrForDestroy]);
+      mod._free(configPtrPtrForDestroy);
+    }
+  }
+
+  /**
+   * Execute SQL without needing a connection ID (uses internal connection).
+   * Used for internal operations like setting lock_configuration.
+   */
+  private executeSQLInternal(sql: string): void {
+    const mod = this.getModule();
+
+    // Create a temporary connection
+    const connPtrPtr = mod._malloc(4);
+    try {
+      const connResult = mod.ccall(
+        'duckdb_connect',
+        'number',
+        ['number', 'number'],
+        [this.dbPtr, connPtrPtr],
+      ) as number;
+
+      if (connResult !== 0) {
+        return; // Silently fail for internal operations
+      }
+
+      const connPtr = mod.getValue(connPtrPtr, 'i32');
+
+      const resultPtr = mod._malloc(64);
+      try {
+        mod.ccall(
+          'duckdb_query',
+          'number',
+          ['number', 'string', 'number'],
+          [connPtr, sql, resultPtr],
+        );
+        mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
+      } finally {
+        mod._free(resultPtr);
+      }
+
+      mod.ccall('duckdb_disconnect', null, ['number'], [connPtrPtr]);
+    } finally {
+      mod._free(connPtrPtr);
     }
   }
 

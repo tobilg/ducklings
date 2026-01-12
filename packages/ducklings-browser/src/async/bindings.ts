@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import type { InitOptions, FileInfo } from '../types.js';
+import type { InitOptions, FileInfo, DuckDBConfig } from '../types.js';
 import { DuckDBError } from '../errors.js';
 import {
   WorkerRequestType,
@@ -97,8 +97,8 @@ export async function init(options?: string | InitOptions): Promise<void> {
     // Instantiate WASM in worker
     await globalDB.instantiate(wasmUrl, wasmJsUrl);
 
-    // Open database
-    await globalDB.open();
+    // Open database with config
+    await globalDB.open(opts.config);
   })();
 
   await initPromise;
@@ -253,10 +253,11 @@ export class DuckDB {
   /**
    * Open the database.
    *
+   * @param config - Optional configuration options
    * @internal
    */
-  async open(): Promise<void> {
-    await this.postTask(WorkerRequestType.OPEN);
+  async open(config?: DuckDBConfig): Promise<void> {
+    await this.postTask(WorkerRequestType.OPEN, { config });
   }
 
   /**

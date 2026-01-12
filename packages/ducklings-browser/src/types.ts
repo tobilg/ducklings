@@ -51,6 +51,54 @@ export const DuckDBType = {
 export type DuckDBTypeId = (typeof DuckDBType)[keyof typeof DuckDBType];
 
 /**
+ * Database access mode.
+ * @category Configuration
+ */
+export enum AccessMode {
+  /** DuckDB determines mode based on context (resolves to READ_WRITE for in-memory) */
+  AUTOMATIC = 'automatic',
+  /** Read-only mode - all write operations are blocked */
+  READ_ONLY = 'read_only',
+  /** Read-write mode - allows both reads and writes */
+  READ_WRITE = 'read_write',
+}
+
+/**
+ * DuckDB configuration options.
+ * @category Configuration
+ */
+export interface DuckDBConfig {
+  /**
+   * Database access mode.
+   * Use READ_ONLY to prevent any data modification.
+   * @default AccessMode.AUTOMATIC
+   */
+  accessMode?: AccessMode;
+
+  /**
+   * Enable external access (file I/O, httpfs, etc.).
+   * Set to false to prevent all external data access.
+   * WARNING: Setting to false will disable httpfs functionality.
+   * @default true
+   */
+  enableExternalAccess?: boolean;
+
+  /**
+   * Lock configuration after startup.
+   * Prevents runtime configuration changes via SQL SET commands.
+   * @default true (secure default)
+   */
+  lockConfiguration?: boolean;
+
+  /**
+   * Custom configuration options.
+   * Key-value pairs passed directly to duckdb_set_config.
+   * @see https://duckdb.org/docs/configuration/overview
+   */
+  customConfig?: Record<string, string>;
+}
+
+/**
  * Column metadata for query results.
  * @category Types
  */
@@ -98,6 +146,12 @@ export interface InitOptions {
    * Note: Main thread mode blocks the UI during operations.
    */
   useMainThread?: boolean;
+
+  /**
+   * DuckDB configuration options.
+   * Controls access mode, security settings, and custom configuration.
+   */
+  config?: DuckDBConfig;
 }
 
 /**

@@ -3,7 +3,7 @@
  * @packageDocumentation
  */
 
-import type { ColumnInfo, CSVInsertOptions, JSONInsertOptions } from '../types.js';
+import type { ColumnInfo, CSVInsertOptions, JSONInsertOptions, DuckDBConfig } from '../types.js';
 
 /**
  * Request types sent from main thread to worker.
@@ -83,6 +83,10 @@ export enum WorkerResponseType {
 export interface InstantiateRequest {
   wasmUrl?: string;
   wasmJsUrl?: string;
+}
+
+export interface OpenRequest {
+  config?: DuckDBConfig;
 }
 
 export interface QueryRequest {
@@ -371,7 +375,7 @@ export type RequestPayloadMap = {
   [WorkerRequestType.PING]: undefined;
   [WorkerRequestType.INSTANTIATE]: InstantiateRequest;
   [WorkerRequestType.GET_VERSION]: undefined;
-  [WorkerRequestType.OPEN]: undefined;
+  [WorkerRequestType.OPEN]: OpenRequest;
   [WorkerRequestType.CLOSE]: undefined;
   [WorkerRequestType.CONNECT]: undefined;
   [WorkerRequestType.DISCONNECT]: DisconnectRequest;

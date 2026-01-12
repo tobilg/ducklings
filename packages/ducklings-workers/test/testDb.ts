@@ -34,6 +34,9 @@ export const version = duckdb.version;
 export const init = duckdb.init;
 export const DuckDBError = duckdb.DuckDBError;
 export const DuckDBType = duckdb.DuckDBType;
+export const AccessMode = duckdb.AccessMode;
+export const sanitizeSql = duckdb.sanitizeSql;
+export const checkSql = duckdb.checkSql;
 
 // Export types
-export type { DuckDBTypeId, ColumnInfo, InitOptions } from '../src/index';
+export type { DuckDBTypeId, ColumnInfo, InitOptions, DuckDBConfig, SanitizeSqlOptions, SanitizeResult } from '../src/index';
