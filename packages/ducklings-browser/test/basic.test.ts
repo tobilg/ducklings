@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DuckDB, getDB, version, DuckDBError } from './testDb';
-import type { Connection } from '../src/index';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { DuckDB, getDB, version, DuckDBError, type Connection } from './testDb';
 
 describe('DuckDB Basic Operations', () => {
   // Use a single shared connection for all tests to avoid issues with
@@ -102,7 +101,9 @@ describe('DuckDB Basic Operations', () => {
         expect.fail('Should have thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(DuckDBError);
-        expect((e as DuckDBError).message).toBeTruthy();
+        if (e instanceof DuckDBError) {
+          expect(e.message).toBeTruthy();
+        }
       }
     });
   });

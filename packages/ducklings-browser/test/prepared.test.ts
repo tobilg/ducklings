@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getDB } from './testDb';
-import type { Connection } from '../src/index';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { getDB, type Connection } from './testDb';
 
 /**
  * Prepared Statement Tests

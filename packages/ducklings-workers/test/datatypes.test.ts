@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DuckDB } from './testDb';
+import { DuckDB, Connection } from './testDb';
 
 describe('Data Types (Async)', () => {
   let db: DuckDB;
-  let conn: ReturnType<DuckDB['connect']>;
+  let conn: Connection;
 
   beforeAll(() => {
     db = new DuckDB();
@@ -34,7 +34,7 @@ describe('Data Types (Async)', () => {
     it('should handle BIGINT', async () => {
       const result = await conn.query('SELECT 1234567890123::BIGINT AS val');
       // BigInt values may be returned as strings or numbers
-      expect(BigInt(result[0].val)).toBe(1234567890123n);
+      expect(BigInt(result[0].val as string | number)).toBe(1234567890123n);
     });
 
     it('should handle UTINYINT', async () => {

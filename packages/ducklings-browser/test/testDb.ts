@@ -43,6 +43,7 @@ await duckdb.init({
 
 // Re-export everything from the module
 export const DuckDB = duckdb.DuckDB;
+export const Connection = duckdb.Connection;
 export const version = duckdb.version;
 export const init = duckdb.init;
 export const getDB = duckdb.getDB;
@@ -50,4 +51,7 @@ export const DuckDBError = duckdb.DuckDBError;
 export const DuckDBType = duckdb.DuckDBType;
 
 // Export types (these need to come from TypeScript source for proper type inference)
+// DuckDB and Connection types are derived from the value exports above to match runtime types
+export type DuckDB = InstanceType<typeof DuckDB>;
+export type Connection = InstanceType<typeof Connection>;
 export type { DuckDBTypeId, ColumnInfo, InitOptions } from '../src/index';

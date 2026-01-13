@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sanitizeSql, checkSql, DuckDBError } from './testDb';
+type DuckDBErrorInstance = InstanceType<typeof DuckDBError>;
 
 describe('SQL Sanitization', () => {
   describe('sanitizeSql()', () => {
@@ -63,9 +64,12 @@ describe('SQL Sanitization', () => {
         try {
           sanitizeSql('SELECT * FROM duckdb_secrets()');
           expect.fail('Should have thrown');
-        } catch (e) {
-          expect(e).toBeInstanceOf(DuckDBError);
-          expect((e as DuckDBError).code).toBe('SANITIZE_ERROR');
+        } catch (e: unknown) {
+          if (!(e instanceof Error)) {
+            throw new Error('Expected DuckDBError');
+          }
+          const err = e as DuckDBErrorInstance;
+          expect(err.code).toBe('SANITIZE_ERROR');
         }
       });
     });

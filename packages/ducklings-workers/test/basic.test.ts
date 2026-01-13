@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DuckDB, version, DuckDBError } from './testDb';
+type DuckDBErrorInstance = InstanceType<typeof DuckDBError>;
 
 describe('DuckDB Basic Operations (Async)', () => {
 
@@ -58,7 +59,7 @@ describe('DuckDB Basic Operations (Async)', () => {
     it('should handle multiple rows', async () => {
       const result = await conn.query('SELECT * FROM range(5) AS t(num)');
       expect(result).toHaveLength(5);
-      expect(result.map((r) => r.num)).toEqual([0, 1, 2, 3, 4]);
+      expect(result.map((r: { num: number }) => r.num)).toEqual([0, 1, 2, 3, 4]);
     });
 
     it('should handle string values', async () => {
@@ -103,9 +104,12 @@ describe('DuckDB Basic Operations (Async)', () => {
     it('should include query in error', async () => {
       try {
         await conn.query('INVALID SQL SYNTAX');
-      } catch (e) {
-        expect(e).toBeInstanceOf(DuckDBError);
-        expect((e as DuckDBError).query).toBe('INVALID SQL SYNTAX');
+      } catch (e: unknown) {
+        if (!(e instanceof Error)) {
+          throw new Error('Expected DuckDBError');
+        }
+        const err = e as DuckDBErrorInstance;
+        expect(err.query).toBe('INVALID SQL SYNTAX');
       }
     });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DuckDB, DuckDBError } from './testDb';
+type DuckDBErrorInstance = InstanceType<typeof DuckDBError>;
 
 describe('Error Handling (Async)', () => {
   let db: DuckDB;
@@ -27,9 +28,12 @@ describe('Error Handling (Async)', () => {
       try {
         await conn.query(badQuery);
         expect.fail('Should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(DuckDBError);
-        expect((e as DuckDBError).query).toBe(badQuery);
+      } catch (e: unknown) {
+        if (!(e instanceof Error)) {
+          throw new Error('Expected DuckDBError');
+        }
+        const err = e as DuckDBErrorInstance;
+        expect(err.query).toBe(badQuery);
       }
     });
 

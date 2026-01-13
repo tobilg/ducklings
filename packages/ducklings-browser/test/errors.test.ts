@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getDB, DuckDBError } from './testDb';
-import type { Connection } from '../src/index';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { getDB, DuckDBError, type Connection } from './testDb';
 
 describe('Error Handling', () => {
   let conn: Connection;
@@ -24,7 +23,9 @@ describe('Error Handling', () => {
         expect.fail('Should have thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(DuckDBError);
-        expect((e as DuckDBError).message).toContain('nonexistent_table_xyz');
+        if (e instanceof DuckDBError) {
+          expect(e.message).toContain('nonexistent_table_xyz');
+        }
       }
     });
 

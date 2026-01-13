@@ -372,10 +372,10 @@ link_wasm_module() {
     local DUCKDB_LIBS=$(find_duckdb_libraries)
     log_info "Using libraries: $DUCKDB_LIBS"
 
-    # Create main.cpp with proper httpfs initialization
+    # Create main.cpp with proper extension initialization
     # This is compiled as part of the final link step, so it can access DuckDB internals
     cat > "${BUILD_DIR}/main.cpp" << 'MAINEOF'
-// Entry point for DuckDB WASM with httpfs support
+// Entry point for DuckDB WASM with statically linked extensions
 #include "duckdb.hpp"
 #include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
@@ -383,6 +383,8 @@ link_wasm_module() {
 #include "httpfs.hpp"
 #include "httpfs_extension.hpp"
 #include "http_wasm.hpp"
+#include "json_extension.hpp"
+#include "parquet_extension.hpp"
 
 namespace duckdb {
 
@@ -393,7 +395,7 @@ bool preloaded_httpfs = true;
 
 extern "C" {
 
-// Initialize httpfs for WASM - must be called after duckdb_open
+// Initialize all statically linked extensions for WASM - must be called after duckdb_open
 void duckdb_wasm_httpfs_init(duckdb_database db) {
     if (!db) return;
 
@@ -412,11 +414,29 @@ void duckdb_wasm_httpfs_init(duckdb_database db) {
             config.http_util = duckdb::make_shared_ptr<duckdb::HTTPWasmUtil>();
         }
 
-        // Use ExtensionLoader to properly load the httpfs extension
+        // Load httpfs extension
         // This registers all file systems (HTTP, S3, HuggingFace) and secret types (s3, aws, r2, gcs)
-        duckdb::ExtensionLoader loader(*duckdb_instance.instance, "httpfs");
-        duckdb::HttpfsExtension extension;
-        extension.Load(loader);
+        {
+            duckdb::ExtensionLoader loader(*duckdb_instance.instance, "httpfs");
+            duckdb::HttpfsExtension extension;
+            extension.Load(loader);
+        }
+
+        // Load json extension
+        // This registers JSON type alias and all JSON functions
+        {
+            duckdb::ExtensionLoader loader(*duckdb_instance.instance, "json");
+            duckdb::JsonExtension extension;
+            extension.Load(loader);
+        }
+
+        // Load parquet extension
+        // This registers Parquet reader/writer and related functions
+        {
+            duckdb::ExtensionLoader loader(*duckdb_instance.instance, "parquet");
+            duckdb::ParquetExtension extension;
+            extension.Load(loader);
+        }
 
     } catch (...) {
         // Silently ignore errors during initialization
@@ -534,6 +554,8 @@ MAINEOF
         -I"${BUILD_DIR}/src/include" \
         -I"${HTTPFS_SRC}/src/include" \
         -I"${HTTP_WASM_SRC}" \
+        -I"${DUCKDB_SRC}/extension/json/include" \
+        -I"${DUCKDB_SRC}/extension/parquet/include" \
         -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
         -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
         -I"${DUCKDB_SRC}/third_party/re2" \

@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getDB } from './testDb';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { getDB, type Connection } from './testDb';
 import { tableFromIPC, tableToIPC, tableFromArrays } from '@uwdata/flechette';
-import type { Connection } from '../src/index';
 
 describe('Arrow IPC', () => {
   let conn: Connection;
@@ -16,7 +15,7 @@ describe('Arrow IPC', () => {
   describe('tableToIPC()', () => {
     it('should serialize Arrow table to IPC stream format', async () => {
       const table = await conn.queryArrow('SELECT i, i * 2 AS doubled FROM range(5) t(i)');
-      const ipcBytes = tableToIPC(table, { format: 'stream' });
+      const ipcBytes = tableToIPC(table, { format: 'stream' })!;
 
       expect(ipcBytes).toBeInstanceOf(Uint8Array);
       expect(ipcBytes.length).toBeGreaterThan(0);
@@ -24,7 +23,7 @@ describe('Arrow IPC', () => {
 
     it('should serialize Arrow table to IPC file format', async () => {
       const table = await conn.queryArrow('SELECT i FROM range(3) t(i)');
-      const ipcBytes = tableToIPC(table, { format: 'file' });
+      const ipcBytes = tableToIPC(table, { format: 'file' })!;
 
       expect(ipcBytes).toBeInstanceOf(Uint8Array);
       expect(ipcBytes.length).toBeGreaterThan(0);
@@ -32,7 +31,7 @@ describe('Arrow IPC', () => {
 
     it('should serialize empty table', async () => {
       const table = await conn.queryArrow('SELECT * FROM range(0) t(i)');
-      const ipcBytes = tableToIPC(table);
+      const ipcBytes = tableToIPC(table, { format: 'stream' })!;
 
       expect(ipcBytes).toBeInstanceOf(Uint8Array);
     });
@@ -41,7 +40,7 @@ describe('Arrow IPC', () => {
   describe('tableFromIPC()', () => {
     it('should deserialize IPC stream back to table', async () => {
       const original = await conn.queryArrow('SELECT i AS id, \'name_\' || i::VARCHAR AS name FROM range(5) t(i)');
-      const ipcBytes = tableToIPC(original, { format: 'stream' });
+      const ipcBytes = tableToIPC(original, { format: 'stream' })!;
       const restored = tableFromIPC(ipcBytes);
 
       expect(restored.numRows).toBe(original.numRows);
@@ -52,7 +51,7 @@ describe('Arrow IPC', () => {
 
     it('should deserialize IPC file back to table', async () => {
       const original = await conn.queryArrow('SELECT 42 AS answer, true AS flag');
-      const ipcBytes = tableToIPC(original, { format: 'file' });
+      const ipcBytes = tableToIPC(original, { format: 'file' })!;
       const restored = tableFromIPC(ipcBytes);
 
       expect(restored.numRows).toBe(1);
@@ -69,7 +68,7 @@ describe('Arrow IPC', () => {
           true AS bool_col
       `);
 
-      const ipcBytes = tableToIPC(original, { format: 'stream' });
+      const ipcBytes = tableToIPC(original, { format: 'stream' })!;
       const restored = tableFromIPC(ipcBytes);
 
       expect(restored.getChild('int_col')?.at(0)).toBe(1);

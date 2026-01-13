@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DuckDB, AccessMode, DuckDBError } from './testDb';
+import { DuckDB, AccessMode } from './testDb';
 
 describe('DuckDB Configuration', () => {
   describe('AccessMode', () => {

@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getDB, DuckDBType } from './testDb';
-import type { Connection } from '../src/index';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { getDB, DuckDBType, type Connection } from './testDb';
 
 describe('Streaming Results', () => {
   let conn: Connection;

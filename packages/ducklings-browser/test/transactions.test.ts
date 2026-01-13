@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getDB } from './testDb';
-import type { Connection } from '../src/index';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { getDB, type Connection } from './testDb';
 
 describe('Transactions', () => {
   let conn: Connection;

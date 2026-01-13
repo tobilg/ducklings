@@ -38,5 +38,7 @@ export const AccessMode = duckdb.AccessMode;
 export const sanitizeSql = duckdb.sanitizeSql;
 export const checkSql = duckdb.checkSql;
 
-// Export types
-export type { DuckDBTypeId, ColumnInfo, InitOptions, DuckDBConfig, SanitizeSqlOptions, SanitizeResult } from '../src/index';
+// Export types (classes need separate type export for use as type annotations)
+// DuckDB type is derived from the value export above
+export type DuckDB = InstanceType<typeof DuckDB>;
+export type { Connection, DuckDBTypeId, ColumnInfo, InitOptions, DuckDBConfig, SanitizeSqlOptions, SanitizeResult } from '../src/index';
