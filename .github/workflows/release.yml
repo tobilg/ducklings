@@ -56,6 +56,11 @@ jobs:
       - name: Install binaryen
         run: sudo apt-get install -y binaryen
 
+      - name: Clean stale CMake cache
+        run: |
+          # CMake cache contains hardcoded Emscripten paths that change each run
+          rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
