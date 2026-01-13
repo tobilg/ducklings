@@ -352,6 +352,10 @@ find_duckdb_libraries() {
     # Add json extension
     if [ -f "${BUILD_DIR}/extension/json/libjson_extension.a" ]; then
         LIBS="${LIBS} ${BUILD_DIR}/extension/json/libjson_extension.a"
+	else
+		log_error "Missing json extension archive at ${BUILD_DIR}/extension/json/libjson_extension.a"
+		log_error "Clean build cache (build/emscripten) or rerun configure to rebuild extensions"
+		exit 1
     fi
 
     # Add our httpfs and http_wasm libraries

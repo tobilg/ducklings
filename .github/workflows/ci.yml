@@ -67,11 +67,11 @@ jobs:
             dist/duckdb-workers.wasm
           retention-days: 7
 
-  # Build and test TypeScript packages
-  build-typescript:
+  # Build/test browser package
+  browser:
     runs-on: ubuntu-latest
     needs: build-wasm
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -95,31 +95,64 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build browser package
+      - name: Build
         run: pnpm --filter @ducklings/browser build
 
-      - name: Build workers package
-        run: pnpm --filter @ducklings/workers build
-
-      - name: Type check browser package
+      - name: Type check
         run: pnpm --filter @ducklings/browser typecheck
 
-      - name: Type check workers package
-        run: pnpm --filter @ducklings/workers typecheck
-
-      - name: Test browser package
+      - name: Test
         run: pnpm --filter @ducklings/browser test
 
-      - name: Test workers package
-        run: pnpm --filter @ducklings/workers test
-
-      - name: Upload package artifacts
+      - name: Upload browser dist
         uses: actions/upload-artifact@v6
         with:
-          name: packages
-          path: |
-            packages/ducklings-browser/dist
-            packages/ducklings-workers/dist
+          name: browser-dist
+          path: packages/ducklings-browser/dist
+          retention-days: 7
+
+  # Build/test workers package
+  workers:
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: wasm-artifacts
+          path: dist
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @ducklings/workers build
+
+      - name: Type check
+        run: pnpm --filter @ducklings/workers typecheck
+
+      - name: Test
+        run: pnpm --filter @ducklings/workers test
+
+      - name: Upload workers dist
+        uses: actions/upload-artifact@v6
+        with:
+          name: workers-dist
+          path: packages/ducklings-workers/dist
           retention-days: 7
 
   # Lint check
