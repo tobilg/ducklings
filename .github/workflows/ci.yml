@@ -8,7 +8,7 @@ on:
 
 env:
   EMSDK_VERSION: '3.1.50'
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
 
 jobs:
   # Build WASM (browser and workers)
@@ -34,7 +34,7 @@ jobs:
         with:
           path: |
             build/emscripten
-          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('deps/duckdb/**', 'scripts/build-duckdb.sh', 'cmake/**') }}
+          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
           restore-keys: |
             duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
 
@@ -48,7 +48,7 @@ jobs:
         run: make duckdb-workers
 
       - name: Upload WASM artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wasm-artifacts
           path: |
@@ -66,49 +66,42 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: wasm-artifacts
           path: dist
 
-      - name: Install dependencies (browser package)
-        run: cd packages/ducklings-browser && pnpm install --frozen-lockfile
-
-      - name: Install dependencies (workers package)
-        run: cd packages/ducklings-workers && pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build browser package
-        run: |
-          cd packages/ducklings-browser
-          pnpm build
+        run: pnpm --filter @ducklings/browser build
 
       - name: Build workers package
-        run: |
-          cd packages/ducklings-workers
-          pnpm build
+        run: pnpm --filter @ducklings/workers build
 
       - name: Type check browser package
-        run: cd packages/ducklings-browser && pnpm typecheck
+        run: pnpm --filter @ducklings/browser typecheck
 
       - name: Type check workers package
-        run: cd packages/ducklings-workers && pnpm typecheck
+        run: pnpm --filter @ducklings/workers typecheck
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: packages
           path: |
@@ -123,26 +116,24 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: |
-          cd packages/ducklings-browser && pnpm install --frozen-lockfile
-          cd ../ducklings-workers && pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Lint browser package
-        run: cd packages/ducklings-browser && pnpm lint || true
+        run: pnpm --filter @ducklings/browser lint || true
 
       - name: Lint workers package
-        run: cd packages/ducklings-workers && pnpm lint || true
+        run: pnpm --filter @ducklings/workers lint || true

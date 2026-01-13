@@ -1,4 +1,4 @@
-<img src="assets/logo.png" alt="Ducklings" width="200" />
+![ducklings logo](assets/logo.png)
 
 A minimal DuckDB WASM binding for browsers and serverless environments.
 

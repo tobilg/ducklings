@@ -1,4 +1,4 @@
-<img src="docs/images/ducklings-150.png" alt="Ducklings" />
+![ducklings logo](docs/images/ducklings-150.png)
 
 # Ducklings
 
