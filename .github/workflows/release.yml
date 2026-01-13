@@ -74,9 +74,11 @@ jobs:
 
           echo "Release version: $VERSION (npm tag: $NPM_TAG)"
 
-  build-wasm:
+  browser:
     runs-on: ubuntu-latest
     needs: version
+    permissions:
+      contents: write
     timeout-minutes: 90
     steps:
       - name: Checkout repository
@@ -94,14 +96,14 @@ jobs:
       - name: Verify
         run: emcc -v
 
-      - name: Cache DuckDB build
+      - name: Cache DuckDB build (browser)
         uses: actions/cache@v5
         with:
           path: build/emscripten
-          key: duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
+          key: duckdb-wasm-release-browser-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
           restore-keys: |
-            duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-            duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+            duckdb-wasm-release-browser-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+            duckdb-wasm-browser-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
 
       - name: Install binaryen
         run: sudo apt-get install -y binaryen
@@ -115,37 +117,14 @@ jobs:
       - name: Build browser WASM
         run: make duckdb-browser
 
-      - name: Build workers WASM
-        run: make duckdb-workers
-
-      - name: Upload WASM artifacts
+      - name: Upload browser WASM artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: duckdb-wasm-dist
+          name: duckdb-browser-dist
           path: |
             dist/duckdb.wasm
-            dist/duckdb-workers.wasm
             dist/duckdb.js
-            dist/duckdb-workers.js
           if-no-files-found: error
-
-  browser:
-    runs-on: ubuntu-latest
-    needs: [version, build-wasm]
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Download WASM artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: duckdb-wasm-dist
-          path: dist
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -187,9 +166,10 @@ jobs:
 
   workers:
     runs-on: ubuntu-latest
-    needs: [version, build-wasm]
+    needs: version
     permissions:
       contents: write
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -197,11 +177,44 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Download WASM artifacts
-        uses: actions/download-artifact@v4
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
         with:
-          name: duckdb-wasm-dist
-          path: dist
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Verify
+        run: emcc -v
+
+      - name: Cache DuckDB build (workers)
+        uses: actions/cache@v5
+        with:
+          path: build/emscripten
+          key: duckdb-wasm-release-workers-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
+          restore-keys: |
+            duckdb-wasm-release-workers-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+            duckdb-wasm-workers-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+
+      - name: Install binaryen
+        run: sudo apt-get install -y binaryen
+
+      - name: Clean stale CMake cache
+        run: |
+          rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
+          # Ensure extensions rebuild to avoid stale archives when cache is reused
+          rm -rf build/emscripten/extension
+
+      - name: Build workers WASM
+        run: make duckdb-workers
+
+      - name: Upload workers WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: duckdb-workers-dist
+          path: |
+            dist/duckdb-workers.wasm
+            dist/duckdb-workers.js
+          if-no-files-found: error
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -243,7 +256,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: [version, build-wasm, browser, workers]
+    needs: [version, browser, workers]
     if: ${{ github.event_name == 'push' && needs.version.outputs.dry_run != 'true' }}
     permissions:
       contents: write
@@ -253,10 +266,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download WASM artifacts
+      - name: Download browser WASM artifact
         uses: actions/download-artifact@v4
         with:
-          name: duckdb-wasm-dist
+          name: duckdb-browser-dist
+          path: dist
+
+      - name: Download workers WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: duckdb-workers-dist
           path: dist
 
       - name: Create GitHub Release

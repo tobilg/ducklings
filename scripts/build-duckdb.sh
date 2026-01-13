@@ -234,6 +234,8 @@ build_duckdb() {
 
     cd "$BUILD_DIR"
     emmake make -j${CORES} duckdb_static
+	# Ensure extension static libs are built for linking
+	emmake make -j${CORES} json_extension parquet_extension core_functions_extension
 
     log_info "DuckDB static library built!"
 }
@@ -350,13 +352,9 @@ find_duckdb_libraries() {
     fi
 
     # Add json extension
-    if [ -f "${BUILD_DIR}/extension/json/libjson_extension.a" ]; then
-        LIBS="${LIBS} ${BUILD_DIR}/extension/json/libjson_extension.a"
-	else
-		log_error "Missing json extension archive at ${BUILD_DIR}/extension/json/libjson_extension.a"
-		log_error "Clean build cache (build/emscripten) or rerun configure to rebuild extensions"
-		exit 1
-    fi
+	if [ -f "${BUILD_DIR}/extension/json/libjson_extension.a" ]; then
+		LIBS="${LIBS} ${BUILD_DIR}/extension/json/libjson_extension.a"
+	fi
 
     # Add our httpfs and http_wasm libraries
     if [ -f "${BUILD_DIR}/httpfs/libhttpfs_extension.a" ]; then
