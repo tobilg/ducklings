@@ -144,13 +144,13 @@ Use `query()` when:
 ```typescript
 import {
   init,
-  getDB,
+  DuckDB,
   tableFromArrays,
   tableToIPC
 } from '@ducklings/browser';
 
 await init();
-const db = getDB();
+const db = new DuckDB();
 const conn = await db.connect();
 
 // Create source data as Arrow

@@ -1,7 +1,5 @@
 <img src="assets/logo.png" alt="Ducklings" width="200" />
 
-# Ducklings API Documentation
-
 A minimal DuckDB WASM binding for browsers and serverless environments.
 
 ## Packages
@@ -30,13 +28,13 @@ npm install @ducklings/workers
 ### Browser Usage
 
 ```typescript
-import { init, getDB } from '@ducklings/browser';
+import { init, DuckDB } from '@ducklings/browser';
 
 // Initialize the WASM module (runs in Web Worker)
 await init();
 
-// Get database and create connection
-const db = getDB();
+// Create database and connection
+const db = new DuckDB();
 const conn = await db.connect();
 
 // Execute queries (async)

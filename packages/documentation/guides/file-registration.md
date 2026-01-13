@@ -127,10 +127,10 @@ DuckDB can read many formats from registered files:
 ## Complete Example
 
 ```typescript
-import { init, getDB } from '@ducklings/browser';
+import { init, DuckDB } from '@ducklings/browser';
 
 await init();
-const db = getDB();
+const db = new DuckDB();
 const conn = await db.connect();
 
 // Register remote Parquet file

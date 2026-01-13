@@ -11,6 +11,14 @@ A minimal DuckDB WASM build for browsers and serverless environments like Cloudf
 | [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) | Browser version (async API) | `npm install @ducklings/browser` |
 | [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers version (async API) | `npm install @ducklings/workers` |
 
+## Documentation 
+
+The API documentation can be found at [https://ducklings-api.serverless-duckdb.com](https://ducklings-api.serverless-duckdb.com)
+
+## Try it out
+
+You can try the browser package in an example  at [https://ducklings.serverless-duckdb.com](https://ducklings.serverless-duckdb.com)
+
 ## Features
 
 - **Minimal footprint**: ~5.7MB (browser) / ~9.7MB (workers) gzipped WASM (optimized with -Oz, LTO, wasm-opt)

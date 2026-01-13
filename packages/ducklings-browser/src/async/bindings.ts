@@ -39,10 +39,10 @@ let initPromise: Promise<void> | null = null;
  *
  * @example
  * ```typescript
- * import { init, getDB } from '@ducklings/browser';
+ * import { init, DuckDB } from '@ducklings/browser';
  *
  * await init();
- * const db = getDB();
+ * const db = new DuckDB();
  * const conn = await db.connect();
  *
  * const rows = await conn.query('SELECT 42 as answer');

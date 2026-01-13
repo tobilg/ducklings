@@ -12,7 +12,7 @@
  */
 
 // Use the workers package which includes Asyncify for async fetch() support
-import { init, DuckDB, version, tableToIPC, AccessMode, type Connection } from '@ducklings/workers';
+import { init, DuckDB, version, tableToIPC, AccessMode, sanitizeSql, DuckDBError, type Connection } from '@ducklings/workers';
 // Import the workers-specific WASM module (resolved by vite plugin)
 import wasmModule from '@ducklings/workers/wasm';
 
@@ -175,6 +175,22 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           );
         }
 
+        // Sanitize SQL to block dangerous patterns (duckdb_secrets, PRAGMA, COPY TO, EXPORT DATABASE)
+        try {
+          sanitizeSql(body.sql);
+        } catch (e) {
+          if (e instanceof DuckDBError && e.code === 'SANITIZE_ERROR') {
+            return new Response(
+              JSON.stringify({ error: e.message }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders },
+              }
+            );
+          }
+          throw e;
+        }
+
         // Note: query() is async in workers build
         const queryResult = await conn!.query(body.sql);
         return new Response(
@@ -209,6 +225,22 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
               headers: { 'Content-Type': 'application/json', ...corsHeaders },
             }
           );
+        }
+
+        // Sanitize SQL to block dangerous patterns
+        try {
+          sanitizeSql(arrowBody.sql);
+        } catch (e) {
+          if (e instanceof DuckDBError && e.code === 'SANITIZE_ERROR') {
+            return new Response(
+              JSON.stringify({ error: e.message }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders },
+              }
+            );
+          }
+          throw e;
         }
 
         // Execute query and get Arrow Table

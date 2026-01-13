@@ -30,13 +30,13 @@ pnpm add @ducklings/workers
 ### Browser
 
 ```typescript
-import { init, getDB } from '@ducklings/browser';
+import { init, DuckDB } from '@ducklings/browser';
 
 // Initialize DuckDB (URLs are auto-resolved)
 await init();
 
 // Get the database instance and create a connection
-const db = getDB();
+const db = new DuckDB();
 const conn = await db.connect();
 
 // Execute a query

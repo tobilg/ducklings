@@ -5,7 +5,7 @@
  * @packageDocumentation
  */
 
-import type { EmscriptenModule, ColumnInfo, DuckDBTypeId, DuckDBConfig } from '../types.js';
+import type { EmscriptenModule, ColumnInfo, DuckDBTypeId } from '../types.js';
 import { DuckDBType, AccessMode } from '../types.js';
 import {
   WorkerRequestType,

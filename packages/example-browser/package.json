@@ -15,6 +15,7 @@
   "devDependencies": {
     "typescript": "^5.8.3",
     "vite": "^7.3.1",
+    "vite-plugin-static-copy": "^3.1.4",
     "wrangler": "^4.58.0"
   }
 }

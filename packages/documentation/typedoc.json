@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "name": "Ducklings API",
+  "name": "Ducklings API Documentation",
   "entryPoints": [
     "../ducklings-browser",
     "../ducklings-workers"
@@ -16,6 +16,7 @@
     "./guides/arrow-integration.md",
     "./guides/prepared-statements.md"
   ],
+  "favicon": "./assets/favicon.ico",
   "includeVersion": false,
   "excludePrivate": true,
   "excludeProtected": true,
@@ -27,5 +28,5 @@
     "npm (workers)": "https://www.npmjs.com/package/@ducklings/workers"
   },
   "categorizeByGroup": true,
-  "categoryOrder": ["Database", "Connection", "Query Results", "File Operations", "Types", "*"]
+  "categoryOrder": ["Database", "Connection", "Query Results", "Security", "Configuration", "File Operations", "Types", "*"]
 }

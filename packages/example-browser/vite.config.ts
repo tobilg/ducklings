@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -16,6 +17,22 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  plugins: [
+    viteStaticCopy({
+      targets: [
+        {
+          // Copy worker.js to assets folder (same location as bundled JS)
+          src: '../ducklings-browser/dist/worker.js',
+          dest: 'assets',
+        },
+        {
+          // Copy WASM files
+          src: '../ducklings-browser/dist/wasm/*',
+          dest: 'assets/wasm',
+        },
+      ],
+    }),
+  ],
   build: {
     outDir: 'dist',
     rollupOptions: {

@@ -27,10 +27,10 @@ Use the browser package when:
 - Using modern bundlers like Vite, webpack, or esbuild
 
 ```typescript
-import { init, getDB } from '@ducklings/browser';
+import { init, DuckDB } from '@ducklings/browser';
 
 await init();
-const db = getDB();
+const db = new DuckDB();
 const conn = await db.connect();
 
 // Queries run in Web Worker, UI stays responsive
@@ -96,9 +96,9 @@ Switching between packages requires minimal code changes:
 
 ```typescript
 // Browser
-import { init, getDB } from '@ducklings/browser';
+import { init, DuckDB } from '@ducklings/browser';
 await init();
-const db = getDB();
+const db = new DuckDB();
 
 // Workers
 import { init, DuckDB } from '@ducklings/workers';
