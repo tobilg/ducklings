@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  EMSDK_VERSION: '3.1.50'
+  EMSDK_VERSION: '4.0.22'
   NODE_VERSION: '22'
 
 jobs:
@@ -27,6 +27,9 @@ jobs:
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: 'emsdk-cache'
+
+      - name: Verify
+        run: emcc -v
 
       - name: Cache DuckDB build
         id: cache-duckdb
@@ -130,7 +133,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Lint browser package
         run: pnpm --filter @ducklings/browser lint || true
