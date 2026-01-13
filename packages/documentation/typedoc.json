@@ -6,10 +6,12 @@
     "../ducklings-workers"
   ],
   "entryPointStrategy": "packages",
+  "router": "structure-dir",
   "out": "dist",
   "readme": "./README.md",
   "projectDocuments": [
     "./guides/getting-started.md",
+    "./guides/cdn-usage.md",
     "./guides/browser-vs-workers.md",
     "./guides/file-registration.md",
     "./guides/streaming-results.md",
@@ -28,5 +30,5 @@
     "npm (workers)": "https://www.npmjs.com/package/@ducklings/workers"
   },
   "categorizeByGroup": true,
-  "categoryOrder": ["Database", "Connection", "Query Results", "Security", "Configuration", "File Operations", "Types", "*"]
+  "categoryOrder": ["Database", "Connection", "Query Results", "CDN", "Security", "Configuration", "File Operations", "Types", "*"]
 }

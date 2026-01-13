@@ -144,6 +144,14 @@ jobs:
           cd packages/ducklings-browser && pnpm typecheck
           cd ../ducklings-workers && pnpm typecheck
 
+      - name: Test browser package
+        run: |
+          cd packages/ducklings-browser && pnpm test
+
+      - name: Test workers package
+        run: |
+          cd packages/ducklings-workers && pnpm test
+
       - name: Publish @ducklings/browser
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |

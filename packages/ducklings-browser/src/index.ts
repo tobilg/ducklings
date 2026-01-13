@@ -67,6 +67,8 @@ export { Connection } from './async/connection.js';
 export { DataChunk } from './async/data-chunk.js';
 export { PreparedStatement } from './async/prepared-statement.js';
 export { AsyncStreamingResult as StreamingResult } from './async/streaming-result.js';
+// CDN utilities
+export { createWorker, type DuckDBBundle, getJsDelivrBundle, getUnpkgBundle } from './cdn.js';
 // Errors
 export { DuckDBError } from './errors.js';
 // Types
@@ -81,3 +83,5 @@ export {
   type InitOptions,
   type JSONInsertOptions,
 } from './types.js';
+// Version info
+export { PACKAGE_NAME, PACKAGE_VERSION } from './version.js';

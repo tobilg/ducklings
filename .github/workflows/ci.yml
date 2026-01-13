@@ -109,6 +109,12 @@ jobs:
       - name: Type check workers package
         run: pnpm --filter @ducklings/workers typecheck
 
+      - name: Test browser package
+        run: pnpm --filter @ducklings/browser test
+
+      - name: Test workers package
+        run: pnpm --filter @ducklings/workers test
+
       - name: Upload package artifacts
         uses: actions/upload-artifact@v6
         with:

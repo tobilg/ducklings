@@ -135,6 +135,21 @@ export interface InitOptions {
   workerUrl?: string;
 
   /**
+   * Pre-created Worker instance.
+   * Use {@link createWorker} for CDN loading to work around cross-origin restrictions.
+   *
+   * @example
+   * ```typescript
+   * import { createWorker, getJsDelivrBundle, init } from '@ducklings/browser';
+   *
+   * const bundle = getJsDelivrBundle();
+   * const worker = await createWorker(bundle.mainWorker);
+   * await init({ worker, wasmUrl: bundle.wasmModule, wasmJsUrl: bundle.wasmJs });
+   * ```
+   */
+  worker?: Worker;
+
+  /**
    * Pre-compiled WebAssembly.Module (for Cloudflare Workers).
    * In Workers, import the WASM file directly and pass it here.
    */

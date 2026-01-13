@@ -190,9 +190,26 @@ await init('/path/to/duckdb.wasm');
 import { init } from '@ducklings/workers';
 import wasmModule from '@ducklings/workers/wasm';
 await init({ wasmModule });
+```
 
-// Get DuckDB version
-console.log(version()); // "v1.4.3"
+### CDN Usage (Browser)
+
+Load directly from jsDelivr or unpkg - cross-origin workers are handled automatically:
+
+```html
+<script type="module">
+  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@1.4.3/+esm';
+
+  await init();
+
+  const db = new DuckDB();
+  const conn = await db.connect();
+  const result = await conn.query('SELECT 42 as answer');
+  console.log(result); // [{ answer: 42 }]
+
+  await conn.close();
+  await db.close();
+</script>
 ```
 
 ### DuckDB Class

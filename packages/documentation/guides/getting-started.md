@@ -17,6 +17,8 @@ npm install @ducklings/browser
 pnpm add @ducklings/browser
 ```
 
+> **Tip:** You can also [load from a CDN](./cdn-usage.md) without installing any packages.
+
 ### Cloudflare Workers Package
 
 ```bash
@@ -86,6 +88,7 @@ Both packages provide the same query methods:
 
 ## Next Steps
 
+- [CDN Usage](./cdn-usage.md) - Load from CDN without build tools
 - [Browser vs Workers](./browser-vs-workers.md) - Choose the right package
 - [File Registration](./file-registration.md) - Load remote and local data
 - [Streaming Results](./streaming-results.md) - Handle large datasets

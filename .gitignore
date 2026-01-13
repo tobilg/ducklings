@@ -79,9 +79,6 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# TypeDoc
-docs/
-
 # Temporary files
 *.tmp
 *.temp
@@ -90,3 +87,4 @@ docs/
 .wrangler/
 .claude/
 plans/
+manual-tests/

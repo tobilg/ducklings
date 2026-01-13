@@ -2,6 +2,7 @@
   "name": "@ducklings/documentation",
   "version": "1.4.3",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "typedoc",
     "preview": "npx serve dist",

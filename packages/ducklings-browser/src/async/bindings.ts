@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 
+import { createWorker } from '../cdn.js';
 import { DuckDBError } from '../errors.js';
 import type { DuckDBConfig, FileInfo, InitOptions } from '../types.js';
 import {
@@ -72,8 +73,23 @@ export async function init(options?: string | InitOptions): Promise<void> {
     const wasmUrl = opts.wasmUrl ?? new URL('wasm/duckdb.wasm', baseUrl).href;
     const wasmJsUrl = opts.wasmJsUrl ?? new URL('wasm/duckdb.js', baseUrl).href;
 
-    // Create worker
-    const worker = new Worker(workerUrl, { type: 'module' });
+    // Create worker - use provided worker, or create one automatically
+    // Auto-detect cross-origin (CDN) and use Blob URL workaround if needed
+    let worker: Worker;
+    if (opts.worker) {
+      worker = opts.worker;
+    } else {
+      // Check if cross-origin (only in browser environment where location exists)
+      const isCrossOrigin =
+        typeof location !== 'undefined' && new URL(workerUrl).origin !== location.origin;
+      if (isCrossOrigin) {
+        // CDN usage: fetch worker script and create Blob URL
+        worker = await createWorker(workerUrl);
+      } else {
+        // Same-origin or Node.js: create worker directly
+        worker = new Worker(workerUrl, { type: 'module' });
+      }
+    }
 
     // Wait for worker to be ready
     await new Promise<void>((resolve, reject) => {

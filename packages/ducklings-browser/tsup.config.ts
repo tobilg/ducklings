@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import pkg from './package.json';
 
 export default defineConfig([
   // Main bundle
@@ -15,6 +16,11 @@ export default defineConfig([
     // Mark wasm-related imports as external since they need special handling
     external: ['./wasm/duckdb.js', '../wasm/duckdb.js', 'env'],
     noExternal: ['@uwdata/flechette'],
+    // Inject package version at build time for CDN URL generation
+    define: {
+      __PACKAGE_NAME__: JSON.stringify(pkg.name),
+      __PACKAGE_VERSION__: JSON.stringify(pkg.version),
+    },
     esbuildOptions(options) {
       options.banner = {
         js: '// Ducklings - Minimal DuckDB for browsers',
