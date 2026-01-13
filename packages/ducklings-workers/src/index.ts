@@ -237,7 +237,10 @@ export function checkSql(sql: string, options: SanitizeSqlOptions = {}): Sanitiz
   const strippedSql = stripSqlComments(sql);
 
   // Check each pattern unless explicitly allowed
-  if (!options.allowSecretsFunction && DANGEROUS_PATTERNS.secretsFunction.pattern.test(strippedSql)) {
+  if (
+    !options.allowSecretsFunction &&
+    DANGEROUS_PATTERNS.secretsFunction.pattern.test(strippedSql)
+  ) {
     return {
       safe: false,
       sql,

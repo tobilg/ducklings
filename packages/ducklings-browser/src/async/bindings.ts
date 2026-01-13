@@ -4,19 +4,19 @@
  * @packageDocumentation
  */
 
-import type { InitOptions, FileInfo, DuckDBConfig } from '../types.js';
 import { DuckDBError } from '../errors.js';
+import type { DuckDBConfig, FileInfo, InitOptions } from '../types.js';
 import {
-  WorkerRequestType,
-  WorkerResponseType,
-  WorkerTask,
-  type WorkerRequest,
-  type WorkerResponse,
-  type ErrorResponse,
   type ConnectionIdResponse,
-  type VersionResponse,
+  type ErrorResponse,
   type FileBufferResponse,
   type FileInfoListResponse,
+  type VersionResponse,
+  type WorkerRequest,
+  WorkerRequestType,
+  type WorkerResponse,
+  WorkerResponseType,
+  WorkerTask,
 } from '../worker/protocol.js';
 import { Connection } from './connection.js';
 
@@ -213,11 +213,7 @@ export class DuckDB {
    *
    * @internal
    */
-  postTask<T>(
-    type: WorkerRequestType,
-    data?: unknown,
-    transfer?: Transferable[],
-  ): Promise<T> {
+  postTask<T>(type: WorkerRequestType, data?: unknown, transfer?: Transferable[]): Promise<T> {
     if (this.closed) {
       return Promise.reject(new DuckDBError('Database is closed'));
     }
@@ -345,11 +341,7 @@ export class DuckDB {
    * ```
    */
   async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
-    await this.postTask(
-      WorkerRequestType.REGISTER_FILE_BUFFER,
-      { name, buffer },
-      [buffer.buffer],
-    );
+    await this.postTask(WorkerRequestType.REGISTER_FILE_BUFFER, { name, buffer }, [buffer.buffer]);
   }
 
   /**
@@ -420,10 +412,9 @@ export class DuckDB {
    * @returns List of matching files
    */
   async globFiles(pattern: string): Promise<FileInfo[]> {
-    const response = await this.postTask<FileInfoListResponse>(
-      WorkerRequestType.GLOB_FILES,
-      { pattern },
-    );
+    const response = await this.postTask<FileInfoListResponse>(WorkerRequestType.GLOB_FILES, {
+      pattern,
+    });
     return response.files;
   }
 

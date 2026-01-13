@@ -5,44 +5,6 @@
  * @packageDocumentation
  */
 
-import type { EmscriptenModule, ColumnInfo, DuckDBTypeId } from '../types.js';
-import { DuckDBType, AccessMode } from '../types.js';
-import {
-  WorkerRequestType,
-  WorkerResponseType,
-  type WorkerRequest,
-  type WorkerResponse,
-  type InstantiateRequest,
-  type OpenRequest,
-  type QueryRequest,
-  type QueryArrowRequest,
-  type QueryStreamingRequest,
-  type ExecuteRequest,
-  type FetchChunkRequest,
-  type CloseStreamingResultRequest,
-  type PrepareRequest,
-  type RunPreparedRequest,
-  type ExecutePreparedRequest,
-  type ClosePreparedRequest,
-  type TransactionRequest,
-  type RegisterFileURLRequest,
-  type RegisterFileBufferRequest,
-  type RegisterFileTextRequest,
-  type DropFileRequest,
-  type CopyFileToBufferRequest,
-  type CopyFileToPathRequest,
-  type GlobFilesRequest,
-  type InsertArrowFromIPCRequest,
-  type InsertCSVFromPathRequest,
-  type InsertJSONFromPathRequest,
-  type DisconnectRequest,
-  type ErrorResponse,
-  type QueryResultResponse,
-  type StreamingResultInfoResponse,
-  type DataChunkResponse,
-  type PreparedStatementBinding,
-} from './protocol.js';
-
 import {
   bool,
   type DataType,
@@ -63,6 +25,43 @@ import {
   uint64,
   utf8,
 } from '@uwdata/flechette';
+import type { ColumnInfo, DuckDBTypeId, EmscriptenModule } from '../types.js';
+import { AccessMode, DuckDBType } from '../types.js';
+import {
+  type ClosePreparedRequest,
+  type CloseStreamingResultRequest,
+  type CopyFileToBufferRequest,
+  type CopyFileToPathRequest,
+  type DataChunkResponse,
+  type DisconnectRequest,
+  type DropFileRequest,
+  type ErrorResponse,
+  type ExecutePreparedRequest,
+  type ExecuteRequest,
+  type FetchChunkRequest,
+  type GlobFilesRequest,
+  type InsertArrowFromIPCRequest,
+  type InsertCSVFromPathRequest,
+  type InsertJSONFromPathRequest,
+  type InstantiateRequest,
+  type OpenRequest,
+  type PreparedStatementBinding,
+  type PrepareRequest,
+  type QueryArrowRequest,
+  type QueryRequest,
+  type QueryResultResponse,
+  type QueryStreamingRequest,
+  type RegisterFileBufferRequest,
+  type RegisterFileTextRequest,
+  type RegisterFileURLRequest,
+  type RunPreparedRequest,
+  type StreamingResultInfoResponse,
+  type TransactionRequest,
+  type WorkerRequest,
+  WorkerRequestType,
+  type WorkerResponse,
+  WorkerResponseType,
+} from './protocol.js';
 
 /**
  * Stored prepared statement info.
@@ -301,17 +300,18 @@ export class DuckDBDispatcher {
   // Lifecycle handlers
   // ============================================================================
 
-  private async handleInstantiate(
-    requestId: number,
-    data: InstantiateRequest,
-  ): Promise<void> {
+  private async handleInstantiate(requestId: number, data: InstantiateRequest): Promise<void> {
     // Type for the module factory function
     type ModuleFactory = (config?: Record<string, unknown>) => Promise<EmscriptenModule>;
     let DuckDBModule: ModuleFactory;
 
     // Check for pre-loaded module factory (for testing environments like @vitest/web-worker)
-    if ((globalThis as unknown as { __DUCKDB_MODULE_FACTORY__?: ModuleFactory }).__DUCKDB_MODULE_FACTORY__) {
-      DuckDBModule = (globalThis as unknown as { __DUCKDB_MODULE_FACTORY__: ModuleFactory }).__DUCKDB_MODULE_FACTORY__;
+    if (
+      (globalThis as unknown as { __DUCKDB_MODULE_FACTORY__?: ModuleFactory })
+        .__DUCKDB_MODULE_FACTORY__
+    ) {
+      DuckDBModule = (globalThis as unknown as { __DUCKDB_MODULE_FACTORY__: ModuleFactory })
+        .__DUCKDB_MODULE_FACTORY__;
     } else {
       // Dynamic import of the Emscripten-generated JavaScript
       // wasmJsUrl must be provided for bundler compatibility
@@ -327,7 +327,9 @@ export class DuckDBDispatcher {
     const config: Record<string, unknown> = {};
 
     // Check for pre-compiled WASM module (for testing environments)
-    const preloadedWasmModule = (globalThis as unknown as { __DUCKDB_WASM_MODULE__?: WebAssembly.Module }).__DUCKDB_WASM_MODULE__;
+    const preloadedWasmModule = (
+      globalThis as unknown as { __DUCKDB_WASM_MODULE__?: WebAssembly.Module }
+    ).__DUCKDB_WASM_MODULE__;
     if (preloadedWasmModule) {
       // Use Emscripten's instantiateWasm callback to provide pre-compiled module
       config.instantiateWasm = (
@@ -604,7 +606,12 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Query failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
@@ -635,7 +642,12 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Query failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
@@ -649,12 +661,7 @@ export class DuckDBDispatcher {
       if (!ipcBuffer) {
         throw new Error('Failed to serialize Arrow table to IPC');
       }
-      this.postResponse(
-        requestId,
-        WorkerResponseType.ARROW_IPC,
-        { ipcBuffer },
-        [ipcBuffer.buffer],
-      );
+      this.postResponse(requestId, WorkerResponseType.ARROW_IPC, { ipcBuffer }, [ipcBuffer.buffer]);
     } finally {
       mod._free(resultPtr);
     }
@@ -674,7 +681,12 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Query failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
@@ -714,7 +726,12 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Query failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
@@ -747,7 +764,12 @@ export class DuckDBDispatcher {
     // For DuckDB C API, results are materialized, so we simulate chunking
     // by reading rows in batches
     const CHUNK_SIZE = 2048;
-    const rowCount = mod.ccall('duckdb_row_count', 'number', ['number'], [info.resultPtr]) as number;
+    const rowCount = mod.ccall(
+      'duckdb_row_count',
+      'number',
+      ['number'],
+      [info.resultPtr],
+    ) as number;
 
     const startRow = info.currentChunk * CHUNK_SIZE;
     const endRow = Math.min(startRow + CHUNK_SIZE, rowCount);
@@ -811,7 +833,12 @@ export class DuckDBDispatcher {
         // Get error from prepared statement
         const stmtPtr = mod.getValue(stmtPtrPtr, '*');
         if (stmtPtr) {
-          const errorPtr = mod.ccall('duckdb_prepare_error', 'number', ['number'], [stmtPtr]) as number;
+          const errorPtr = mod.ccall(
+            'duckdb_prepare_error',
+            'number',
+            ['number'],
+            [stmtPtr],
+          ) as number;
           const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Prepare failed';
           // duckdb_destroy_prepare expects a pointer to the statement pointer
           // stmtPtrPtr already contains the pointer, so we can use it directly
@@ -830,7 +857,9 @@ export class DuckDBDispatcher {
         sql: data.sql,
       });
 
-      this.postResponse(requestId, WorkerResponseType.PREPARED_STATEMENT_ID, { preparedStatementId });
+      this.postResponse(requestId, WorkerResponseType.PREPARED_STATEMENT_ID, {
+        preparedStatementId,
+      });
     } finally {
       mod._free(stmtPtrPtr);
     }
@@ -858,7 +887,12 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Execute prepared failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
@@ -896,13 +930,23 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Execute prepared failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
       }
 
-      const rowsChanged = mod.ccall('duckdb_rows_changed', 'number', ['number'], [resultPtr]) as number;
+      const rowsChanged = mod.ccall(
+        'duckdb_rows_changed',
+        'number',
+        ['number'],
+        [resultPtr],
+      ) as number;
       mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
 
       this.postResponse(requestId, WorkerResponseType.ROWS_CHANGED, { rowsChanged });
@@ -930,7 +974,11 @@ export class DuckDBDispatcher {
     this.postOK(requestId);
   }
 
-  private applyBindings(mod: EmscriptenModule, stmtPtr: number, bindings: PreparedStatementBinding[]): void {
+  private applyBindings(
+    mod: EmscriptenModule,
+    stmtPtr: number,
+    bindings: PreparedStatementBinding[],
+  ): void {
     // Apply bindings directly using duckdb_bind_* functions
     for (const binding of bindings) {
       const { index, type, value } = binding;
@@ -942,7 +990,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_null',
             'number',
             ['number', 'number', 'number'],
-            [stmtPtr, index, 0]
+            [stmtPtr, index, 0],
           ) as number;
           break;
 
@@ -951,7 +999,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_boolean',
             'number',
             ['number', 'number', 'number', 'number'],
-            [stmtPtr, index, 0, (value as boolean) ? 1 : 0]
+            [stmtPtr, index, 0, (value as boolean) ? 1 : 0],
           ) as number;
           break;
 
@@ -965,7 +1013,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_int32',
             'number',
             ['number', 'number', 'number', 'number'],
-            [stmtPtr, index, 0, value as number]
+            [stmtPtr, index, 0, value as number],
           ) as number;
           break;
 
@@ -978,7 +1026,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_int64',
             'number',
             ['number', 'number', 'number', 'number', 'number'],
-            [stmtPtr, index, 0, valLow, valHigh]
+            [stmtPtr, index, 0, valLow, valHigh],
           ) as number;
           break;
         }
@@ -988,7 +1036,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_float',
             'number',
             ['number', 'number', 'number', 'number'],
-            [stmtPtr, index, 0, value as number]
+            [stmtPtr, index, 0, value as number],
           ) as number;
           break;
 
@@ -997,7 +1045,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_double',
             'number',
             ['number', 'number', 'number', 'number'],
-            [stmtPtr, index, 0, value as number]
+            [stmtPtr, index, 0, value as number],
           ) as number;
           break;
 
@@ -1006,7 +1054,7 @@ export class DuckDBDispatcher {
             'duckdb_bind_varchar',
             'number',
             ['number', 'number', 'number', 'string'],
-            [stmtPtr, index, 0, value as string]
+            [stmtPtr, index, 0, value as string],
           ) as number;
           break;
 
@@ -1019,7 +1067,7 @@ export class DuckDBDispatcher {
               'duckdb_bind_blob',
               'number',
               ['number', 'number', 'number', 'number', 'number', 'number'],
-              [stmtPtr, index, 0, ptr, blob.length, 0]
+              [stmtPtr, index, 0, ptr, blob.length, 0],
             ) as number;
           } finally {
             mod._free(ptr);
@@ -1070,7 +1118,12 @@ export class DuckDBDispatcher {
       ) as number;
 
       if (status !== 0) {
-        const errorPtr = mod.ccall('duckdb_result_error', 'number', ['number'], [resultPtr]) as number;
+        const errorPtr = mod.ccall(
+          'duckdb_result_error',
+          'number',
+          ['number'],
+          [resultPtr],
+        ) as number;
         const error = errorPtr ? mod.UTF8ToString(errorPtr) : 'Query failed';
         mod.ccall('duckdb_destroy_result', null, ['number'], [resultPtr]);
         throw new Error(error);
@@ -1111,7 +1164,9 @@ export class DuckDBDispatcher {
     }
 
     // Write file
-    (mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }).FS.writeFile(path, data.buffer);
+    (
+      mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }
+    ).FS.writeFile(path, data.buffer);
 
     this.postOK(requestId);
   }
@@ -1124,7 +1179,9 @@ export class DuckDBDispatcher {
     const encoder = new TextEncoder();
     const buffer = encoder.encode(data.text);
 
-    (mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }).FS.writeFile(path, buffer);
+    (
+      mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }
+    ).FS.writeFile(path, buffer);
 
     this.postOK(requestId);
   }
@@ -1156,7 +1213,9 @@ export class DuckDBDispatcher {
     const mod = this.getModule();
 
     const path = `/${data.name}`;
-    const buffer = (mod as unknown as { FS: { readFile: (path: string) => Uint8Array } }).FS.readFile(path);
+    const buffer = (
+      mod as unknown as { FS: { readFile: (path: string) => Uint8Array } }
+    ).FS.readFile(path);
 
     this.postResponse(requestId, WorkerResponseType.FILE_BUFFER, { buffer }, [buffer.buffer]);
   }
@@ -1167,8 +1226,12 @@ export class DuckDBDispatcher {
     const srcPath = `/${data.srcName}`;
     const dstPath = `/${data.dstPath}`;
 
-    const buffer = (mod as unknown as { FS: { readFile: (path: string) => Uint8Array } }).FS.readFile(srcPath);
-    (mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }).FS.writeFile(dstPath, buffer);
+    const buffer = (
+      mod as unknown as { FS: { readFile: (path: string) => Uint8Array } }
+    ).FS.readFile(srcPath);
+    (
+      mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }
+    ).FS.writeFile(dstPath, buffer);
 
     this.postOK(requestId);
   }
@@ -1180,7 +1243,9 @@ export class DuckDBDispatcher {
     const files: { name: string; size: number }[] = [];
 
     try {
-      const dir = (mod as unknown as { FS: { readdir: (path: string) => string[] } }).FS.readdir('/');
+      const dir = (mod as unknown as { FS: { readdir: (path: string) => string[] } }).FS.readdir(
+        '/',
+      );
       const pattern = data.pattern.replace(/\*/g, '.*').replace(/\?/g, '.');
       const regex = new RegExp(`^${pattern}$`);
 
@@ -1188,7 +1253,9 @@ export class DuckDBDispatcher {
         if (name === '.' || name === '..') continue;
         if (regex.test(name)) {
           try {
-            const stat = (mod as unknown as { FS: { stat: (path: string) => { size: number } } }).FS.stat(`/${name}`);
+            const stat = (
+              mod as unknown as { FS: { stat: (path: string) => { size: number } } }
+            ).FS.stat(`/${name}`);
             files.push({ name, size: stat.size });
           } catch {
             // Skip files that can't be stat'd
@@ -1212,7 +1279,9 @@ export class DuckDBDispatcher {
     const mod = this.getModule();
     const tempPath = `/_temp_arrow_${Date.now()}.arrow`;
 
-    (mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }).FS.writeFile(tempPath, data.ipcBuffer);
+    (
+      mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }
+    ).FS.writeFile(tempPath, data.ipcBuffer);
 
     try {
       this.executeSQL(
@@ -1273,12 +1342,27 @@ export class DuckDBDispatcher {
   // ============================================================================
 
   private getColumnInfo(mod: EmscriptenModule, resultPtr: number): ColumnInfo[] {
-    const columnCount = mod.ccall('duckdb_column_count', 'number', ['number'], [resultPtr]) as number;
+    const columnCount = mod.ccall(
+      'duckdb_column_count',
+      'number',
+      ['number'],
+      [resultPtr],
+    ) as number;
 
     const columns: ColumnInfo[] = [];
     for (let i = 0; i < columnCount; i++) {
-      const namePtr = mod.ccall('duckdb_column_name', 'number', ['number', 'number'], [resultPtr, i]) as number;
-      const type = mod.ccall('duckdb_column_type', 'number', ['number', 'number'], [resultPtr, i]) as number;
+      const namePtr = mod.ccall(
+        'duckdb_column_name',
+        'number',
+        ['number', 'number'],
+        [resultPtr, i],
+      ) as number;
+      const type = mod.ccall(
+        'duckdb_column_type',
+        'number',
+        ['number', 'number'],
+        [resultPtr, i],
+      ) as number;
 
       columns.push({
         name: mod.UTF8ToString(namePtr),
@@ -1289,7 +1373,10 @@ export class DuckDBDispatcher {
     return columns;
   }
 
-  private extractQueryResult(mod: EmscriptenModule, resultPtr: number): { columns: ColumnInfo[]; rows: unknown[][] } {
+  private extractQueryResult(
+    mod: EmscriptenModule,
+    resultPtr: number,
+  ): { columns: ColumnInfo[]; rows: unknown[][] } {
     const columns = this.getColumnInfo(mod, resultPtr);
     const rowCount = mod.ccall('duckdb_row_count', 'number', ['number'], [resultPtr]) as number;
     const rows = this.extractRows(mod, resultPtr, columns, 0, rowCount);
@@ -1350,14 +1437,34 @@ export class DuckDBDispatcher {
         return val !== 0;
       }
       case DuckDBType.TINYINT:
-        return mod.ccall('duckdb_value_int8', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_int8',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       case DuckDBType.SMALLINT:
-        return mod.ccall('duckdb_value_int16', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_int16',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       case DuckDBType.INTEGER:
-        return mod.ccall('duckdb_value_int32', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_int32',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       case DuckDBType.BIGINT: {
         // Return as number if within safe integer range, otherwise as string for JSON compatibility
-        const strPtr = mod.ccall('duckdb_value_varchar', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        const strPtr = mod.ccall(
+          'duckdb_value_varchar',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
         if (strPtr) {
           const val = mod.UTF8ToString(strPtr);
           mod._free(strPtr);
@@ -1368,17 +1475,37 @@ export class DuckDBDispatcher {
         return null;
       }
       case DuckDBType.UTINYINT:
-        return mod.ccall('duckdb_value_uint8', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_uint8',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       case DuckDBType.USMALLINT:
-        return mod.ccall('duckdb_value_uint16', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_uint16',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       case DuckDBType.UINTEGER: {
         // Convert signed i32 to unsigned using >>> 0
-        const signed = mod.ccall('duckdb_value_uint32', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        const signed = mod.ccall(
+          'duckdb_value_uint32',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
         return signed >>> 0;
       }
       case DuckDBType.UBIGINT: {
         // Return as number if within safe integer range, otherwise as string for JSON compatibility
-        const strPtr = mod.ccall('duckdb_value_varchar', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        const strPtr = mod.ccall(
+          'duckdb_value_varchar',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
         if (strPtr) {
           const val = mod.UTF8ToString(strPtr);
           mod._free(strPtr);
@@ -1389,12 +1516,27 @@ export class DuckDBDispatcher {
         return null;
       }
       case DuckDBType.FLOAT:
-        return mod.ccall('duckdb_value_float', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_float',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       case DuckDBType.DOUBLE:
-        return mod.ccall('duckdb_value_double', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        return mod.ccall(
+          'duckdb_value_double',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
       default: {
         // Fallback to varchar for all other types
-        const strPtr = mod.ccall('duckdb_value_varchar', 'number', ['number', 'number', 'number', 'number', 'number'], [resultPtr, colIdx, 0, rowIdx, 0]) as number;
+        const strPtr = mod.ccall(
+          'duckdb_value_varchar',
+          'number',
+          ['number', 'number', 'number', 'number', 'number'],
+          [resultPtr, colIdx, 0, rowIdx, 0],
+        ) as number;
         if (strPtr) {
           const val = mod.UTF8ToString(strPtr);
           mod._free(strPtr);
@@ -1405,7 +1547,10 @@ export class DuckDBDispatcher {
     }
   }
 
-  private buildArrowTable(mod: EmscriptenModule, resultPtr: number): ReturnType<typeof tableFromArrays> {
+  private buildArrowTable(
+    mod: EmscriptenModule,
+    resultPtr: number,
+  ): ReturnType<typeof tableFromArrays> {
     const columns = this.getColumnInfo(mod, resultPtr);
     const rowCount = mod.ccall('duckdb_row_count', 'number', ['number'], [resultPtr]) as number;
     const columnCount = columns.length;

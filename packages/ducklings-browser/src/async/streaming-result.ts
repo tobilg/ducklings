@@ -4,11 +4,11 @@
  * @packageDocumentation
  */
 
-import { tableFromArrays, type Table } from '@uwdata/flechette';
-import type { ColumnInfo } from '../types.js';
+import { type Table, tableFromArrays } from '@uwdata/flechette';
 import { DuckDBError } from '../errors.js';
+import type { ColumnInfo } from '../types.js';
+import { type DataChunkResponse, WorkerRequestType } from '../worker/protocol.js';
 import type { DuckDB } from './bindings.js';
-import { WorkerRequestType, type DataChunkResponse } from '../worker/protocol.js';
 import { DataChunk } from './data-chunk.js';
 
 /**
@@ -52,12 +52,7 @@ export class AsyncStreamingResult implements AsyncIterable<DataChunk> {
   /**
    * @internal
    */
-  constructor(
-    db: DuckDB,
-    connectionId: number,
-    streamingResultId: number,
-    columns: ColumnInfo[],
-  ) {
+  constructor(db: DuckDB, connectionId: number, streamingResultId: number, columns: ColumnInfo[]) {
     this.db = db;
     this.connectionId = connectionId;
     this.streamingResultId = streamingResultId;
@@ -103,13 +98,10 @@ export class AsyncStreamingResult implements AsyncIterable<DataChunk> {
       return null;
     }
 
-    const response = await this.db.postTask<DataChunkResponse>(
-      WorkerRequestType.FETCH_CHUNK,
-      {
-        connectionId: this.connectionId,
-        streamingResultId: this.streamingResultId,
-      },
-    );
+    const response = await this.db.postTask<DataChunkResponse>(WorkerRequestType.FETCH_CHUNK, {
+      connectionId: this.connectionId,
+      streamingResultId: this.streamingResultId,
+    });
 
     if (response.done && response.rowCount === 0) {
       this.done = true;

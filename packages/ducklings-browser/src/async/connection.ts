@@ -4,18 +4,18 @@
  * @packageDocumentation
  */
 
-import { tableFromIPC, type Table } from '@uwdata/flechette';
-import type { CSVInsertOptions, JSONInsertOptions } from '../types.js';
+import { type Table, tableFromIPC } from '@uwdata/flechette';
 import { DuckDBError } from '../errors.js';
-import type { DuckDB } from './bindings.js';
+import type { CSVInsertOptions, JSONInsertOptions } from '../types.js';
 import {
-  WorkerRequestType,
-  type QueryResultResponse,
   type ArrowIPCResponse,
-  type StreamingResultInfoResponse,
-  type RowsChangedResponse,
   type PreparedStatementIdResponse,
+  type QueryResultResponse,
+  type RowsChangedResponse,
+  type StreamingResultInfoResponse,
+  WorkerRequestType,
 } from '../worker/protocol.js';
+import type { DuckDB } from './bindings.js';
 import { PreparedStatement } from './prepared-statement.js';
 import { AsyncStreamingResult } from './streaming-result.js';
 
@@ -103,10 +103,10 @@ export class Connection {
   async query<T = Record<string, unknown>>(sql: string): Promise<T[]> {
     this.checkClosed();
 
-    const response = await this.db.postTask<QueryResultResponse>(
-      WorkerRequestType.QUERY,
-      { connectionId: this.connectionId, sql },
-    );
+    const response = await this.db.postTask<QueryResultResponse>(WorkerRequestType.QUERY, {
+      connectionId: this.connectionId,
+      sql,
+    });
 
     // Convert row arrays to objects
     const { columns, rows } = response;
@@ -137,10 +137,10 @@ export class Connection {
   async queryArrow(sql: string): Promise<Table> {
     this.checkClosed();
 
-    const response = await this.db.postTask<ArrowIPCResponse>(
-      WorkerRequestType.QUERY_ARROW,
-      { connectionId: this.connectionId, sql },
-    );
+    const response = await this.db.postTask<ArrowIPCResponse>(WorkerRequestType.QUERY_ARROW, {
+      connectionId: this.connectionId,
+      sql,
+    });
 
     return tableFromIPC(response.ipcBuffer);
   }
@@ -200,10 +200,10 @@ export class Connection {
   async execute(sql: string): Promise<number> {
     this.checkClosed();
 
-    const response = await this.db.postTask<RowsChangedResponse>(
-      WorkerRequestType.EXECUTE,
-      { connectionId: this.connectionId, sql },
-    );
+    const response = await this.db.postTask<RowsChangedResponse>(WorkerRequestType.EXECUTE, {
+      connectionId: this.connectionId,
+      sql,
+    });
 
     return response.rowsChanged;
   }
@@ -237,12 +237,7 @@ export class Connection {
       { connectionId: this.connectionId, sql },
     );
 
-    return new PreparedStatement(
-      this.db,
-      this.connectionId,
-      response.preparedStatementId,
-      sql,
-    );
+    return new PreparedStatement(this.db, this.connectionId, response.preparedStatementId, sql);
   }
 
   // ============================================================================

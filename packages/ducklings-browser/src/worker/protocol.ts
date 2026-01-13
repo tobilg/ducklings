@@ -3,7 +3,7 @@
  * @packageDocumentation
  */
 
-import type { ColumnInfo, CSVInsertOptions, JSONInsertOptions, DuckDBConfig } from '../types.js';
+import type { ColumnInfo, CSVInsertOptions, DuckDBConfig, JSONInsertOptions } from '../types.js';
 
 /**
  * Request types sent from main thread to worker.

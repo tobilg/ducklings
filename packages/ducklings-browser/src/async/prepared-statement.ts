@@ -5,13 +5,13 @@
  */
 
 import { DuckDBError } from '../errors.js';
-import type { DuckDB } from './bindings.js';
 import {
-  WorkerRequestType,
   type PreparedStatementBinding,
   type QueryResultResponse,
   type RowsChangedResponse,
+  WorkerRequestType,
 } from '../worker/protocol.js';
+import type { DuckDB } from './bindings.js';
 
 /**
  * A prepared SQL statement with parameter binding.
@@ -42,12 +42,7 @@ export class PreparedStatement {
   /**
    * @internal
    */
-  constructor(
-    db: DuckDB,
-    connectionId: number,
-    preparedStatementId: number,
-    _sql: string,
-  ) {
+  constructor(db: DuckDB, connectionId: number, preparedStatementId: number, _sql: string) {
     this.db = db;
     this.connectionId = connectionId;
     this.preparedStatementId = preparedStatementId;
@@ -244,14 +239,11 @@ export class PreparedStatement {
   async run<T = Record<string, unknown>>(): Promise<T[]> {
     this.checkClosed();
 
-    const response = await this.db.postTask<QueryResultResponse>(
-      WorkerRequestType.RUN_PREPARED,
-      {
-        connectionId: this.connectionId,
-        preparedStatementId: this.preparedStatementId,
-        bindings: this.bindings,
-      },
-    );
+    const response = await this.db.postTask<QueryResultResponse>(WorkerRequestType.RUN_PREPARED, {
+      connectionId: this.connectionId,
+      preparedStatementId: this.preparedStatementId,
+      bindings: this.bindings,
+    });
 
     // Convert row arrays to objects
     const { columns, rows } = response;

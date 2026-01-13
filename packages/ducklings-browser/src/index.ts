@@ -59,28 +59,25 @@
  * ```
  */
 
-// Types
-export {
-  DuckDBType,
-  type DuckDBTypeId,
-  AccessMode,
-  type DuckDBConfig,
-  type ColumnInfo,
-  type InitOptions,
-  type FileInfo,
-  type CSVInsertOptions,
-  type JSONInsertOptions,
-} from './types.js';
-
-// Errors
-export { DuckDBError } from './errors.js';
-
-// Main API
-export { init, version, getDB, DuckDB } from './async/bindings.js';
-export { Connection } from './async/connection.js';
-export { PreparedStatement } from './async/prepared-statement.js';
-export { AsyncStreamingResult as StreamingResult } from './async/streaming-result.js';
-export { DataChunk } from './async/data-chunk.js';
-
 // Re-export flechette types for convenience
 export type { Table } from '@uwdata/flechette';
+// Main API
+export { DuckDB, getDB, init, version } from './async/bindings.js';
+export { Connection } from './async/connection.js';
+export { DataChunk } from './async/data-chunk.js';
+export { PreparedStatement } from './async/prepared-statement.js';
+export { AsyncStreamingResult as StreamingResult } from './async/streaming-result.js';
+// Errors
+export { DuckDBError } from './errors.js';
+// Types
+export {
+  AccessMode,
+  type ColumnInfo,
+  type CSVInsertOptions,
+  type DuckDBConfig,
+  DuckDBType,
+  type DuckDBTypeId,
+  type FileInfo,
+  type InitOptions,
+  type JSONInsertOptions,
+} from './types.js';
