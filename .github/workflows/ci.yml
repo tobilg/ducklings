@@ -44,6 +44,12 @@ jobs:
       - name: Install binaryen (wasm-opt)
         run: sudo apt-get install -y binaryen
 
+      - name: Clean stale CMake cache
+        run: |
+          # CMake cache contains hardcoded Emscripten paths that change each run
+          # Remove cache files but keep compiled objects to speed up rebuilds
+          rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
+
       - name: Build browser WASM
         run: make duckdb-browser
 
