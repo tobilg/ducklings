@@ -234,8 +234,17 @@ build_duckdb() {
 
     cd "$BUILD_DIR"
     emmake make -j${CORES} duckdb_static
-	# Ensure extension static libs are built for linking
-	emmake make -j${CORES} json_extension parquet_extension core_functions_extension
+
+    # Build extension static libs if targets exist (they may be included in duckdb_static)
+    log_info "Building extension static libraries..."
+    for ext in json_extension parquet_extension core_functions_extension; do
+        if grep -q "^${ext}:" Makefile 2>/dev/null; then
+            log_info "  Building $ext..."
+            emmake make -j${CORES} "$ext"
+        else
+            log_info "  Target $ext not found (may be built into duckdb_static)"
+        fi
+    done
 
     log_info "DuckDB static library built!"
 }

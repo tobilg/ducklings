@@ -96,23 +96,8 @@ jobs:
       - name: Verify
         run: emcc -v
 
-      - name: Cache DuckDB build (browser)
-        uses: actions/cache@v5
-        with:
-          path: build/emscripten
-          key: duckdb-wasm-release-browser-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
-          restore-keys: |
-            duckdb-wasm-release-browser-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-            duckdb-wasm-browser-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-
       - name: Install binaryen
         run: sudo apt-get install -y binaryen
-
-      - name: Clean stale CMake cache
-        run: |
-          rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
-          # Ensure extensions rebuild to avoid stale archives when cache is reused
-          rm -rf build/emscripten/extension
 
       - name: Build browser WASM
         run: make duckdb-browser
@@ -186,23 +171,8 @@ jobs:
       - name: Verify
         run: emcc -v
 
-      - name: Cache DuckDB build (workers)
-        uses: actions/cache@v5
-        with:
-          path: build/emscripten
-          key: duckdb-wasm-release-workers-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
-          restore-keys: |
-            duckdb-wasm-release-workers-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-            duckdb-wasm-workers-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-
       - name: Install binaryen
         run: sudo apt-get install -y binaryen
-
-      - name: Clean stale CMake cache
-        run: |
-          rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
-          # Ensure extensions rebuild to avoid stale archives when cache is reused
-          rm -rf build/emscripten/extension
 
       - name: Build workers WASM
         run: make duckdb-workers
