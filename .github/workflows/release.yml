@@ -48,7 +48,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build/emscripten
-          key: duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('deps/duckdb/**', 'scripts/build-duckdb.sh', 'cmake/**') }}
+          key: duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
           restore-keys: |
             duckdb-wasm-release-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
             duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
