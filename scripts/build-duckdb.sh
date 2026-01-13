@@ -203,26 +203,16 @@ configure_duckdb() {
 
     # Use emcmake to configure CMake for Emscripten
     # Note: We build httpfs statically, not as a loadable extension
+    # Extensions: parquet and core_functions are loaded by default in extension_config.cmake
+    # We add json explicitly via BUILD_EXTENSIONS; SKIP_EXTENSIONS disables unwanted ones
     emcmake cmake "$DUCKDB_SRC" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHELL=OFF \
         -DBUILD_UNITTESTS=OFF \
         -DENABLE_SANITIZER=OFF \
         -DENABLE_UBSAN=OFF \
-        -DBUILD_PARQUET_EXTENSION=ON \
-        -DBUILD_JSON_EXTENSION=ON \
-        -DBUILD_AUTOCOMPLETE_EXTENSION=OFF \
-        -DBUILD_ICU_EXTENSION=OFF \
-        -DBUILD_TPCH_EXTENSION=OFF \
-        -DBUILD_TPCDS_EXTENSION=OFF \
-        -DBUILD_FTS_EXTENSION=OFF \
-        -DBUILD_HTTPFS_EXTENSION=OFF \
-        -DBUILD_INET_EXTENSION=OFF \
-        -DBUILD_EXCEL_EXTENSION=OFF \
-        -DBUILD_SQLSMITH_EXTENSION=OFF \
-        -DBUILD_SUBSTRAIT_EXTENSION=OFF \
-        -DBUILD_JEMALLOC_EXTENSION=OFF \
-        -DBUILD_VISUALIZER_EXTENSION=OFF \
+        -DBUILD_EXTENSIONS="json" \
+        -DSKIP_EXTENSIONS="jemalloc" \
         -DDUCKDB_EXPLICIT_PLATFORM=wasm_mvp \
         -DSMALLER_BINARY=TRUE \
         -DCMAKE_CXX_FLAGS="-Oz -DNDEBUG -DDUCKDB_NO_THREADS=1 -DDUCKDB_DISABLE_EXTENSION_LOAD=1 -sDISABLE_EXCEPTION_CATCHING=0" \
