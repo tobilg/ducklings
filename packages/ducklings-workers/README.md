@@ -35,6 +35,78 @@ export default {
 };
 ```
 
+## Singleton Initialization (Recommended)
+
+For production use, reuse the database and connection across requests to avoid re-initialization overhead:
+
+```typescript
+import { init, DuckDB, type Connection } from '@ducklings/workers';
+import wasmModule from '@ducklings/workers/wasm';
+
+// Global state (reused across requests in the same Worker instance)
+let db: DuckDB | null = null;
+let conn: Connection | null = null;
+let initialized = false;
+
+async function ensureInitialized(): Promise<void> {
+  if (initialized && db && conn) {
+    return;
+  }
+
+  await init({ wasmModule });
+  db = new DuckDB();
+  conn = db.connect();
+  initialized = true;
+}
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    await ensureInitialized();
+
+    const rows = await conn!.query('SELECT 42 as answer');
+    return Response.json(rows);
+  }
+};
+```
+
+## Vite Plugin
+
+For projects using Vite to build Cloudflare Workers, we provide a plugin that handles WASM file resolution and copying:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import { ducklingsWorkerPlugin } from '@ducklings/workers/vite-plugin';
+
+export default defineConfig({
+  plugins: [ducklingsWorkerPlugin()],
+  build: {
+    rollupOptions: {
+      external: [/\.wasm$/],
+    },
+  },
+});
+```
+
+### Plugin Options
+
+```typescript
+ducklingsWorkerPlugin({
+  // Output directory for the build (default: 'dist')
+  outDir: 'dist',
+  
+  // Name of the WASM file in the output directory (default: 'duckdb-workers.wasm')
+  wasmFileName: 'duckdb-workers.wasm',
+  
+  // Whether to copy the WASM file to the output directory (default: true)
+  copyWasm: true,
+})
+```
+
+The plugin:
+- Resolves `@ducklings/workers/wasm` imports to a relative path for wrangler
+- Copies the WASM file to your output directory after build
+
 ## Features
 
 - Async API - all query methods return Promises

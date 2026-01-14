@@ -1,9 +1,6 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync } from 'fs';
-
-// Path to the WASM file in the workspace
-const wasmSrcPath = resolve(__dirname, '../ducklings-workers/dist/wasm/duckdb-workers.wasm');
+import { ducklingsWorkerPlugin } from '@ducklings/workers/vite-plugin';
 
 export default defineConfig({
   build: {
@@ -26,31 +23,5 @@ export default defineConfig({
     copyPublicDir: false,
   },
 
-  plugins: [
-    {
-      name: 'cloudflare-wasm',
-      enforce: 'pre',
-
-      // Resolve WASM imports from the package to relative path
-      resolveId(id, importer) {
-        if (id === '@ducklings/workers/wasm') {
-          // Return external reference that will be resolved at runtime
-          return { id: './duckdb-workers.wasm', external: true };
-        }
-        return null;
-      },
-
-      // Copy WASM file to dist after build
-      closeBundle() {
-        const wasmDest = resolve(__dirname, 'dist/duckdb-workers.wasm');
-        try {
-          mkdirSync(resolve(__dirname, 'dist'), { recursive: true });
-          copyFileSync(wasmSrcPath, wasmDest);
-          console.log('Copied WASM file to dist/');
-        } catch (e) {
-          console.error('Failed to copy WASM file:', e);
-        }
-      },
-    },
-  ],
+  plugins: [ducklingsWorkerPlugin()],
 });

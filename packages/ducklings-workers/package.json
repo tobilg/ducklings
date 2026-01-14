@@ -12,8 +12,15 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./wasm": "./dist/wasm/duckdb-workers.wasm",
-    "./wasm/*": "./dist/wasm/*"
+    "./wasm": {
+      "types": "./dist/wasm.d.ts",
+      "default": "./dist/wasm/duckdb-workers.wasm"
+    },
+    "./wasm/*": "./dist/wasm/*",
+    "./vite-plugin": {
+      "types": "./dist/vite-plugin.d.ts",
+      "import": "./dist/vite-plugin.js"
+    }
   },
   "files": [
     "dist",
@@ -21,7 +28,7 @@
   ],
   "scripts": {
     "build": "tsup && pnpm postbuild",
-    "postbuild": "mkdir -p dist/wasm && cp ../../dist/duckdb-workers.js dist/wasm/ && cp ../../dist/duckdb-workers.wasm dist/wasm/",
+    "postbuild": "mkdir -p dist/wasm && cp ../../dist/duckdb-workers.js dist/wasm/ && cp ../../dist/duckdb-workers.wasm dist/wasm/ && cp src/wasm.d.ts dist/wasm.d.ts",
     "dev": "tsup --watch",
     "test": "vitest run --reporter=dot",
     "test:watch": "vitest --reporter=dot",
@@ -45,6 +52,14 @@
     "typedoc": "^0.28.15",
     "typescript": "^5.9.3",
     "vitest": "^4.0.16"
+  },
+  "peerDependencies": {
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "keywords": [
     "duckdb",
