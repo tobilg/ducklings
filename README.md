@@ -86,11 +86,10 @@ await db.close();
 npm install @ducklings/workers
 ```
 
-Use the dedicated workers package for full httpfs support with async API:
+Example Worker:
 
 ```typescript
-import { init, DuckDB, version } from '@ducklings/workers';
-// Import workers-specific WASM module
+import { init, DuckDB } from '@ducklings/workers';
 import wasmModule from '@ducklings/workers/wasm';
 
 export default {
@@ -101,17 +100,13 @@ export default {
     const db = new DuckDB();
     const conn = db.connect();
 
-    // All queries are async in the workers package
-    const result = await conn.query(`
-      SELECT *
-      FROM 'https://example.com/data.parquet'
-      LIMIT 10
-    `);
+    // All queries are async
+    const rows = await conn.query<{answer: number}>('SELECT 42 as answer');
 
     conn.close();
     db.close();
 
-    return Response.json({ data: result });
+    return Response.json(rows);
   }
 };
 ```
