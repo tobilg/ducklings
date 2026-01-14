@@ -5,17 +5,18 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "wrangler dev",
-    "deploy": "pnpm build && wrangler deploy",
+    "dev": "vite dev",
+    "deploy": "vite build && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ducklings/workers": "workspace:*"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.20.3",
     "@cloudflare/workers-types": "^4.20260111.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "wrangler": "^4.58.0"
+    "wrangler": "^4.59.1"
   }
 }

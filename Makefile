@@ -7,7 +7,7 @@ DIST_DIR := dist
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
 DUCKDB_VERSION := v1.4.3
-VERSION_SUFFIX :=-dev.2
+VERSION_SUFFIX :=-dev.3
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 .PHONY: all clean deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-all typescript typescript-browser typescript-workers typescript-all check-deps show-versions example help

@@ -1,13 +1,14 @@
 /**
  * Vite plugin for @ducklings/workers on Cloudflare Workers
  *
- * This plugin handles WASM file resolution and copying for Cloudflare Workers deployments.
+ * This plugin handles WASM file resolution and emission for Cloudflare Workers deployments.
+ * Designed to work with @cloudflare/vite-plugin.
  *
  * @packageDocumentation
  */
 
-import { resolve, dirname } from 'node:path';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
+import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -16,9 +17,16 @@ import { fileURLToPath } from 'node:url';
 interface VitePlugin {
   name: string;
   enforce?: 'pre' | 'post';
-  configResolved?: (config: { root: string }) => void;
+  configResolved?: (config: ResolvedConfig) => void;
   resolveId?: (id: string) => { id: string; external: true } | null;
-  closeBundle?: () => void;
+  writeBundle?: (options: { dir?: string }, bundle: Record<string, unknown>) => void;
+}
+
+interface ResolvedConfig {
+  root: string;
+  build: {
+    outDir: string;
+  };
 }
 
 /**
@@ -26,23 +34,10 @@ interface VitePlugin {
  */
 export interface DucklingsWorkersPluginOptions {
   /**
-   * Output directory for the build.
-   * @default 'dist'
-   */
-  outDir?: string;
-
-  /**
    * Name of the WASM file in the output directory.
    * @default 'duckdb-workers.wasm'
    */
   wasmFileName?: string;
-
-  /**
-   * Whether to copy the WASM file to the output directory.
-   * Set to false if you handle WASM file copying separately.
-   * @default true
-   */
-  copyWasm?: boolean;
 }
 
 /**
@@ -62,7 +57,11 @@ export function getWasmPath(): string {
  *
  * This plugin:
  * - Resolves `@ducklings/workers/wasm` imports to a relative path for wrangler
- * - Optionally copies the WASM file to your output directory
+ * - Copies the WASM file to the output directory after the bundle is written
+ *
+ * Designed to work with @cloudflare/vite-plugin. The plugin detects the actual
+ * output directory structure created by the Cloudflare plugin and places the
+ * WASM file in the correct location.
  *
  * @param options - Plugin configuration options
  * @returns Vite plugin
@@ -71,22 +70,22 @@ export function getWasmPath(): string {
  * ```typescript
  * // vite.config.ts
  * import { defineConfig } from 'vite';
+ * import { cloudflare } from '@cloudflare/vite-plugin';
  * import { ducklingsWorkerPlugin } from '@ducklings/workers/vite-plugin';
  *
  * export default defineConfig({
- *   plugins: [ducklingsWorkerPlugin()],
- *   build: {
- *     rollupOptions: {
- *       external: [/\.wasm$/],
- *     },
- *   },
+ *   plugins: [
+ *     ducklingsWorkerPlugin(),
+ *     cloudflare(),
+ *   ],
  * });
  * ```
  */
 export function ducklingsWorkerPlugin(options: DucklingsWorkersPluginOptions = {}): VitePlugin {
-  const { outDir = 'dist', wasmFileName = 'duckdb-workers.wasm', copyWasm = true } = options;
+  const { wasmFileName = 'duckdb-workers.wasm' } = options;
 
   let projectRoot: string;
+  let outDir: string;
 
   return {
     name: 'ducklings-workers-plugin',
@@ -94,6 +93,7 @@ export function ducklingsWorkerPlugin(options: DucklingsWorkersPluginOptions = {
 
     configResolved(config) {
       projectRoot = config.root;
+      outDir = config.build.outDir;
     },
 
     // Resolve WASM imports from the package to relative path
@@ -105,17 +105,41 @@ export function ducklingsWorkerPlugin(options: DucklingsWorkersPluginOptions = {
       return null;
     },
 
-    // Copy WASM file to output directory after build
-    closeBundle() {
-      if (!copyWasm) return;
-
+    // Copy WASM file after bundle is written - handles Cloudflare plugin's nested output
+    writeBundle(options) {
       const wasmSrcPath = getWasmPath();
-      const wasmDestPath = resolve(projectRoot, outDir, wasmFileName);
+      const baseOutDir = resolve(projectRoot, outDir);
+
+      // The Cloudflare vite plugin creates a nested structure like:
+      // dist/{worker_name}/index.js
+      // We need to find where index.js is and put the WASM file there
+      let targetDir = options.dir || baseOutDir;
+
+      // If options.dir is provided, use it directly
+      if (options.dir) {
+        targetDir = options.dir;
+      } else {
+        // Look for subdirectories that contain index.js (Cloudflare plugin structure)
+        if (existsSync(baseOutDir)) {
+          const entries = readdirSync(baseOutDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const potentialIndexPath = join(baseOutDir, entry.name, 'index.js');
+              if (existsSync(potentialIndexPath)) {
+                targetDir = join(baseOutDir, entry.name);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const wasmDestPath = join(targetDir, wasmFileName);
 
       try {
-        mkdirSync(resolve(projectRoot, outDir), { recursive: true });
+        mkdirSync(targetDir, { recursive: true });
         copyFileSync(wasmSrcPath, wasmDestPath);
-        console.log(`[ducklings] Copied WASM file to ${outDir}/${wasmFileName}`);
+        console.log(`[ducklings] WASM file written to ${wasmDestPath}`);
       } catch (e) {
         console.error('[ducklings] Failed to copy WASM file:', e);
       }

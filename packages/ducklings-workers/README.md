@@ -71,20 +71,19 @@ export default {
 
 ## Vite Plugin
 
-For projects using Vite to build Cloudflare Workers, we provide a plugin that handles WASM file resolution and copying:
+For projects using Vite with `@cloudflare/vite-plugin` to build Cloudflare Workers, we provide a plugin that handles WASM file resolution and copying:
 
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
 import { ducklingsWorkerPlugin } from '@ducklings/workers/vite-plugin';
 
 export default defineConfig({
-  plugins: [ducklingsWorkerPlugin()],
-  build: {
-    rollupOptions: {
-      external: [/\.wasm$/],
-    },
-  },
+  plugins: [
+    ducklingsWorkerPlugin(),
+    cloudflare(),
+  ],
 });
 ```
 
@@ -92,20 +91,14 @@ export default defineConfig({
 
 ```typescript
 ducklingsWorkerPlugin({
-  // Output directory for the build (default: 'dist')
-  outDir: 'dist',
-  
   // Name of the WASM file in the output directory (default: 'duckdb-workers.wasm')
   wasmFileName: 'duckdb-workers.wasm',
-  
-  // Whether to copy the WASM file to the output directory (default: true)
-  copyWasm: true,
 })
 ```
 
 The plugin:
 - Resolves `@ducklings/workers/wasm` imports to a relative path for wrangler
-- Copies the WASM file to your output directory after build
+- Automatically copies the WASM file to the correct output directory (works with Cloudflare vite plugin's nested output structure)
 
 ## Features
 
