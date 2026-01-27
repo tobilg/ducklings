@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/browser",
-  "version": "1.4.3",
+  "version": "1.4.4-dev.1",
   "description": "Minimal DuckDB WASM for serverless environments",
   "type": "module",
   "main": "./dist/index.js",

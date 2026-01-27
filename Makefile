@@ -6,8 +6,8 @@ DIST_DIR := dist
 
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
-DUCKDB_VERSION := v1.4.3
-VERSION_SUFFIX :=-dev.3
+DUCKDB_VERSION := v1.4.4
+VERSION_SUFFIX :=
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 .PHONY: all clean deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-all typescript typescript-browser typescript-workers typescript-all check-deps show-versions example help
@@ -28,6 +28,8 @@ sync-versions:
 	@echo "Setting npm package versions to $(NPM_VERSION)..."
 	cd packages/ducklings-browser && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/example-browser && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/example-cloudflare-worker && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	@echo "Versions synced!"
 
 # Build DuckDB to WASM using Emscripten (default: browser build)

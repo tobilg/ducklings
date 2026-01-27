@@ -21,7 +21,7 @@ You can try the browser package in an example  at [https://ducklings.serverless-
 
 ## Features
 
-- **Minimal footprint**: ~5.7MB (browser) / ~9.7MB (workers) gzipped WASM (optimized with -Oz, LTO, wasm-opt)
+- **Minimal footprint**: ~5.7MB (browser) / ~9.6MB (workers) gzipped WASM (optimized with -Oz, LTO, wasm-opt)
 - **TypeScript API**: Full TypeScript support with type definitions
 - **Prepared statements**: Secure parameterized queries with full type support
 - **Streaming results**: Memory-efficient chunked data processing
@@ -116,7 +116,7 @@ export default {
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
 | `@ducklings/browser` | Async (Web Worker) | ~5.7 MB | Works in browsers |
-| `@ducklings/workers` | Async (Asyncify) | ~9.7 MB | Works in CF Workers |
+| `@ducklings/workers` | Async (Asyncify) | ~9.6 MB | Works in CF Workers |
 
 #### Arrow IPC Endpoint
 
@@ -193,7 +193,7 @@ Load directly from jsDelivr or unpkg - cross-origin workers are handled automati
 
 ```html
 <script type="module">
-  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@1.4.3/+esm';
+  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@1.4.4/+esm';
 
   await init();
 
@@ -576,7 +576,7 @@ The WASM binary is optimized for size using:
 - **wasm-opt**: Binaryen post-processing with `-Oz --converge`
 - **Reduced exports**: Only 59 essential C functions exported
 
-Result: **~5.7MB gzipped** for browser, **~9.7MB gzipped** for workers (with Parquet, httpfs, and JSON extensions)
+Result: **~5.7MB gzipped** for browser, **~9.6MB gzipped** for workers (with Parquet, httpfs, and JSON extensions)
 
 ## Development
 
@@ -628,10 +628,10 @@ make clean && make all
 Both npm packages use the same version, derived from `DUCKDB_VERSION` in the Makefile:
 
 ```
-Makefile: DUCKDB_VERSION := v1.4.3
+Makefile: DUCKDB_VERSION := v1.4.4
                 ↓
-    @ducklings/browser@1.4.3
-    @ducklings/workers@1.4.3
+    @ducklings/browser@1.4.4
+    @ducklings/workers@1.4.4
 ```
 
 To update the version, change `DUCKDB_VERSION` in the Makefile. The version is automatically synced to both `package.json` files during the build process via `make sync-versions`.
@@ -652,16 +652,16 @@ For development/prerelease versions, use `VERSION_SUFFIX`:
 # Build with dev version suffix
 make sync-versions VERSION_SUFFIX=-dev.1
 make show-versions VERSION_SUFFIX=-dev.1
-# Output: npm packages: 1.4.3-dev.1
+# Output: npm packages: 1.4.4-dev.1
 ```
 
 Or set it in the Makefile:
 
 ```makefile
-VERSION_SUFFIX := -dev.1    # Results in 1.4.3-dev.1
-VERSION_SUFFIX := -alpha.0  # Results in 1.4.3-alpha.0
-VERSION_SUFFIX := -beta.1   # Results in 1.4.3-beta.1
-VERSION_SUFFIX := -rc.1     # Results in 1.4.3-rc.1
+VERSION_SUFFIX := -dev.1    # Results in 1.4.4-dev.1
+VERSION_SUFFIX := -alpha.0  # Results in 1.4.4-alpha.0
+VERSION_SUFFIX := -beta.1   # Results in 1.4.4-beta.1
+VERSION_SUFFIX := -rc.1     # Results in 1.4.4-rc.1
 VERSION_SUFFIX :=           # Empty for stable release
 ```
 
@@ -748,7 +748,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 │   ├── duckdb.js       │               │               │   ├── duckdb-workers  │
 │   └── duckdb.wasm     │               │               │   │   .js             │
 │       (~5.7MB gz)     │               │               │   └── duckdb-workers  │
-└───────────┬───────────┘               │               │       .wasm (~9.7MB)  │
+└───────────┬───────────┘               │               │       .wasm (~9.6MB)  │
             │                           │               └───────────┬───────────┘
             │                           │                           │
             ▼                           │                           ▼
@@ -772,12 +772,12 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 ducklings/
 ├── Makefile                       # Build orchestration
 ├── deps/                          # Git submodules
-│   └── duckdb/                    # DuckDB v1.4.3
+│   └── duckdb/                    # DuckDB v1.4.4
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM (~5.7MB gzipped)
 │   ├── duckdb-workers.js          # Workers JS glue (with Asyncify)
-│   └── duckdb-workers.wasm        # Workers WASM (~9.7MB gzipped)
+│   └── duckdb-workers.wasm        # Workers WASM (~9.6MB gzipped)
 ├── packages/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
 │   │   ├── src/index.ts           # Browser entry point
@@ -816,7 +816,7 @@ ducklings/
 │  Type marshalling, memory management, HEAP access               │
 ├─────────────────────────────────┬───────────────────────────────┤
 │  @ducklings/browser             │   @ducklings/workers          │
-│  Browser WASM (~5.7MB gz)       │   Workers WASM (~9.7MB gz)    │
+│  Browser WASM (~5.7MB gz)       │   Workers WASM (~9.6MB gz)    │
 │  - Web Worker + XMLHttpRequest  │   - Asyncify + fetch()        │
 │  - Async API (Promises)         │   - Async API (Promises)      │
 └─────────────────────────────────┴───────────────────────────────┘
@@ -824,7 +824,7 @@ ducklings/
 
 ## Known Limitations
 
-1. **WASM Size**: Browser ~5.7MB, Workers ~9.7MB gzipped. Exceeds CF Workers free tier (3MB) but works with paid tier
+1. **WASM Size**: Browser ~5.7MB, Workers ~9.6MB gzipped. Exceeds CF Workers free tier (3MB) but works with paid tier
 2. **No file system**: In-memory databases only (use httpfs for remote files)
 3. **No threads**: Single-threaded execution
 4. **WASM_BIGINT=0**: 64-bit integers passed as two 32-bit values (handled internally)

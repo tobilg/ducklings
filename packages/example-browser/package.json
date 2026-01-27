@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/example-browser",
-  "version": "0.1.0",
+  "version": "1.4.4-dev.1",
   "private": true,
   "type": "module",
   "scripts": {
