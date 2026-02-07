@@ -32,6 +32,7 @@ sync-versions:
 	cd packages/ducklings-workers && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-browser && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-cloudflare-worker && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/documentation && npm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	@echo "Versions synced!"
 
 # Build DuckDB to WASM using Emscripten (default: browser build)
