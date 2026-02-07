@@ -8,7 +8,7 @@ DIST_DIR := dist
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
 DUCKDB_VERSION := v1.4.4
 NANOARROW_VERSION := apache-arrow-nanoarrow-0.7.0
-VERSION_SUFFIX := dev.1
+VERSION_SUFFIX := -dev.1
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 .PHONY: all clean deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-all typescript typescript-browser typescript-workers typescript-all check-deps show-versions example help
