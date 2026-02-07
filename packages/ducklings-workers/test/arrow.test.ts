@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DuckDB } from './testDb';
+import { utf8, int32, float64, bool } from '@uwdata/flechette';
 
 // Import Arrow utilities
 const distPath = '../dist/index.js';
@@ -127,6 +128,187 @@ describe('Arrow IPC (Async)', () => {
 
       expect(table.numRows).toBe(3);
       expect(table.getChild('with_nulls')?.at(1)).toBeNull();
+    });
+  });
+
+  describe('insertArrowFromIPCStream()', () => {
+    it('should insert Arrow IPC data into a new table', async () => {
+      const table = tableFromArrays({
+        id: [1, 2, 3],
+        value: ['a', 'b', 'c'],
+      }, { types: { value: utf8() } });
+      const ipcBytes = tableToIPC(table, { format: 'stream' });
+
+      await conn.insertArrowFromIPCStream('arrow_workers_test', ipcBytes);
+
+      const rows = await conn.query<{ id: number; value: string }>(
+        'SELECT * FROM arrow_workers_test ORDER BY id',
+      );
+      expect(rows).toHaveLength(3);
+      expect(rows[0]).toEqual({ id: 1, value: 'a' });
+      expect(rows[1]).toEqual({ id: 2, value: 'b' });
+      expect(rows[2]).toEqual({ id: 3, value: 'c' });
+
+      await conn.execute('DROP TABLE arrow_workers_test');
+    });
+
+    it('should handle integer-only data', async () => {
+      const table = tableFromArrays({
+        x: [10, 20, 30],
+        y: [100, 200, 300],
+      });
+      const ipcBytes = tableToIPC(table, { format: 'stream' });
+
+      await conn.insertArrowFromIPCStream('arrow_int_test', ipcBytes);
+
+      const rows = await conn.query<{ x: number; y: number }>(
+        'SELECT * FROM arrow_int_test ORDER BY x',
+      );
+      expect(rows).toHaveLength(3);
+      expect(rows[0]).toEqual({ x: 10, y: 100 });
+      expect(rows[2]).toEqual({ x: 30, y: 300 });
+
+      await conn.execute('DROP TABLE arrow_int_test');
+    });
+
+    it('should handle mixed column types', async () => {
+      const table = tableFromArrays({
+        id: [1, 2],
+        name: ['Alice', 'Bob'],
+        score: [95.5, 87.3],
+        active: [true, false],
+      }, { types: { id: int32(), name: utf8(), score: float64(), active: bool() } });
+      const ipcBytes = tableToIPC(table, { format: 'stream' });
+
+      await conn.insertArrowFromIPCStream('arrow_mixed_test', ipcBytes);
+
+      const rows = await conn.query<{ id: number; name: string; score: number; active: boolean }>(
+        'SELECT * FROM arrow_mixed_test ORDER BY id',
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toEqual({ id: 1, name: 'Alice', score: 95.5, active: true });
+      expect(rows[1]).toEqual({ id: 2, name: 'Bob', score: 87.3, active: false });
+
+      await conn.execute('DROP TABLE arrow_mixed_test');
+    });
+
+    it('should handle a single-row table', async () => {
+      const table = tableFromArrays({
+        col: [42],
+      });
+      const ipcBytes = tableToIPC(table, { format: 'stream' });
+
+      await conn.insertArrowFromIPCStream('arrow_single_test', ipcBytes);
+
+      const rows = await conn.query<{ col: number }>(
+        'SELECT * FROM arrow_single_test',
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toEqual({ col: 42 });
+
+      await conn.execute('DROP TABLE arrow_single_test');
+    });
+
+    it('should handle a large number of rows', async () => {
+      const n = 10000;
+      const ids = Array.from({ length: n }, (_, i) => i);
+      const values = Array.from({ length: n }, (_, i) => `row_${i}`);
+
+      const table = tableFromArrays({
+        id: ids,
+        value: values,
+      }, { types: { value: utf8() } });
+      const ipcBytes = tableToIPC(table, { format: 'stream' });
+
+      await conn.insertArrowFromIPCStream('arrow_large_test', ipcBytes);
+
+      const countRows = await conn.query<{ cnt: number }>(
+        'SELECT COUNT(*) AS cnt FROM arrow_large_test',
+      );
+      expect(countRows[0].cnt).toBe(n);
+
+      const sample = await conn.query<{ id: number; value: string }>(
+        'SELECT * FROM arrow_large_test WHERE id = 9999',
+      );
+      expect(sample).toHaveLength(1);
+      expect(sample[0]).toEqual({ id: 9999, value: 'row_9999' });
+
+      await conn.execute('DROP TABLE arrow_large_test');
+    });
+
+    it('should not overwrite an existing table (CREATE TABLE IF NOT EXISTS)', async () => {
+      // Create initial table via Arrow IPC
+      const table1 = tableFromArrays({ id: [1, 2] });
+      const ipc1 = tableToIPC(table1, { format: 'stream' });
+      await conn.insertArrowFromIPCStream('arrow_nooverwrite_test', ipc1);
+
+      // Second insert with same table name should not overwrite (IF NOT EXISTS)
+      const table2 = tableFromArrays({ id: [10, 20, 30] });
+      const ipc2 = tableToIPC(table2, { format: 'stream' });
+      await conn.insertArrowFromIPCStream('arrow_nooverwrite_test', ipc2);
+
+      // Original data should still be there
+      const rows = await conn.query<{ id: number }>(
+        'SELECT * FROM arrow_nooverwrite_test ORDER BY id',
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toEqual({ id: 1 });
+      expect(rows[1]).toEqual({ id: 2 });
+
+      await conn.execute('DROP TABLE arrow_nooverwrite_test');
+    });
+  });
+
+  describe('queryArrow() + insertArrowFromIPCStream() round-trip', () => {
+    it('should round-trip data through Arrow IPC insert and Arrow query', async () => {
+      // Create a table via SQL
+      await conn.execute(`
+        CREATE TABLE arrow_rt_src AS
+        SELECT i AS id, 'item_' || i::VARCHAR AS label
+        FROM range(5) t(i)
+      `);
+
+      // Query as Arrow, serialize to IPC, insert into new table
+      const arrowTable = await conn.queryArrow('SELECT * FROM arrow_rt_src ORDER BY id');
+      const ipcBytes = tableToIPC(arrowTable, { format: 'stream' });
+      await conn.insertArrowFromIPCStream('arrow_rt_dst', ipcBytes);
+
+      // Query the destination table and compare
+      const rows = await conn.query<{ id: number; label: string }>(
+        'SELECT * FROM arrow_rt_dst ORDER BY id',
+      );
+      expect(rows).toHaveLength(5);
+      expect(rows[0]).toEqual({ id: 0, label: 'item_0' });
+      expect(rows[4]).toEqual({ id: 4, label: 'item_4' });
+
+      await conn.execute('DROP TABLE arrow_rt_src');
+      await conn.execute('DROP TABLE arrow_rt_dst');
+    });
+
+    it('should round-trip numeric types through Arrow', async () => {
+      await conn.execute(`
+        CREATE TABLE arrow_num_src AS SELECT
+          1::INTEGER AS int_val,
+          2::BIGINT AS bigint_val,
+          3.14::DOUBLE AS double_val,
+          1.5::FLOAT AS float_val
+      `);
+
+      const arrowTable = await conn.queryArrow('SELECT * FROM arrow_num_src');
+      const ipcBytes = tableToIPC(arrowTable, { format: 'stream' });
+      await conn.insertArrowFromIPCStream('arrow_num_dst', ipcBytes);
+
+      const rows = await conn.query<{ int_val: number; bigint_val: number; double_val: number; float_val: number }>(
+        'SELECT * FROM arrow_num_dst',
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].int_val).toBe(1);
+      expect(Number(rows[0].bigint_val)).toBe(2);
+      expect(rows[0].double_val).toBeCloseTo(3.14, 2);
+      expect(rows[0].float_val).toBeCloseTo(1.5, 1);
+
+      await conn.execute('DROP TABLE arrow_num_src');
+      await conn.execute('DROP TABLE arrow_num_dst');
     });
   });
 });

@@ -1,6 +1,6 @@
 # Ducklings
 
-A minimal DuckDB WASM build for browsers and serverless environments like Cloudflare Workers.
+A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 
 ## Goals
 

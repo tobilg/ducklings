@@ -80,8 +80,10 @@ export async function init(options?: string | InitOptions): Promise<void> {
       worker = opts.worker;
     } else {
       // Check if cross-origin (only in browser environment where location exists)
+      // Use location.href as base so relative URLs (e.g. from Vite ?url imports) parse correctly
       const isCrossOrigin =
-        typeof location !== 'undefined' && new URL(workerUrl).origin !== location.origin;
+        typeof location !== 'undefined' &&
+        new URL(workerUrl, location.href).origin !== location.origin;
       if (isCrossOrigin) {
         // CDN usage: fetch worker script and create Blob URL
         worker = await createWorker(workerUrl);

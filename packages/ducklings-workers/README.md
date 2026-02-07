@@ -1,6 +1,6 @@
 # @ducklings/workers
 
-Minimal DuckDB WASM for Cloudflare Workers and serverless environments. Async API with full TypeScript support.
+Minimal DuckDB WASM for Cloudflare Workers. Async API with full TypeScript support.
 
 > **Important:** This package requires a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) due to the WASM size (~9.7MB). The free plan has a 3MB limit, while paid plans support up to 10MB.
 
@@ -106,7 +106,7 @@ The plugin:
 - ~9.7MB gzipped WASM (includes Asyncify)
 - Built-in Parquet, JSON, and httpfs extensions
 - Full httpfs support via async `fetch()`
-- Arrow Table support via Flechette
+- Arrow Table support via Flechette (query + insert)
 - Prepared statements with type-safe parameter binding
 - Transaction support
 
@@ -147,6 +147,10 @@ const table = await conn.queryArrow('SELECT * FROM users');
 
 // Execute without returning results
 await conn.execute('INSERT INTO users VALUES (1, "Alice")');
+
+// Insert Arrow IPC data into a table
+const ipc = tableToIPC(arrowTable, { format: 'stream' });
+await conn.insertArrowFromIPCStream('my_table', ipc);
 ```
 
 ### Prepared Statements
@@ -252,7 +256,7 @@ await conn.transaction(async () => {
 ### Arrow Support
 
 ```typescript
-import { tableFromArrays, tableFromIPC, tableToIPC } from '@ducklings/workers';
+import { tableFromArrays, tableFromIPC, tableToIPC, utf8 } from '@ducklings/workers';
 
 // Query as Arrow Table
 const table = await conn.queryArrow('SELECT * FROM users');
@@ -264,9 +268,23 @@ const custom = tableFromArrays({
 });
 
 // Serialize/deserialize Arrow IPC
-const bytes = tableToIPC(table);
+const bytes = tableToIPC(table, { format: 'stream' });
 const restored = tableFromIPC(bytes);
+
+// Insert Arrow IPC data directly into a table
+const data = tableFromArrays(
+  { id: [1, 2], label: ['x', 'y'] },
+  { types: { label: utf8() } }  // Use plain utf8 (see note below)
+);
+const ipc = tableToIPC(data, { format: 'stream' });
+await conn.insertArrowFromIPCStream('my_table', ipc);
 ```
+
+> **Dictionary encoding:** Flechette's `tableFromArrays()` defaults to `dictionary(utf8())` for string columns. The Arrow IPC decoder used internally does not support dictionary-encoded streams. When building tables for `insertArrowFromIPCStream()`, explicitly set string columns to `utf8()`:
+> ```typescript
+> import { utf8 } from '@ducklings/workers';
+> tableFromArrays({ col: ['a', 'b'] }, { types: { col: utf8() } });
+> ```
 
 ## Browser Usage
 

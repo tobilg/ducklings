@@ -7,6 +7,9 @@
  */
 
 import { init, version, getDB, type DuckDB, type Connection, type Table } from '@ducklings/browser';
+import wasmUrl from '@ducklings/browser/wasm/duckdb.wasm?url';
+import wasmJsUrl from '@ducklings/browser/wasm/duckdb.js?url';
+import workerUrl from '@ducklings/browser/worker?url';
 
 // Extend Window interface for setQuery function
 declare global {
@@ -50,8 +53,8 @@ async function initialize(): Promise<void> {
   try {
     log('Initializing DuckDB WASM...');
 
-    // Initialize DuckDB - URLs are auto-resolved from library location
-    await init();
+    // Initialize DuckDB - pass Vite-resolved asset URLs
+    await init({ wasmUrl, wasmJsUrl, workerUrl });
 
     // Get the database instance and create a connection
     db = getDB();

@@ -320,17 +320,32 @@ export class Connection {
   // ============================================================================
 
   /**
-   * Insert data from an Arrow IPC buffer.
+   * Insert data from an Arrow IPC stream buffer into a table.
    *
-   * @param tableName - The name of the table to insert into
-   * @param ipcBuffer - The Arrow IPC buffer containing the data
+   * Creates a new table with the given name from the Arrow IPC data. If the table
+   * already exists, the call is a no-op (uses `CREATE TABLE IF NOT EXISTS`).
+   *
+   * **Important:** The IPC stream must not contain dictionary-encoded columns.
+   * Flechette's `tableFromArrays()` defaults to `dictionary(utf8())` for string
+   * columns. Use explicit `utf8()` types to avoid this.
+   *
+   * @param tableName - The name of the table to create
+   * @param ipcBuffer - Arrow IPC stream bytes (use `tableToIPC(table, { format: 'stream' })`)
+   * @throws When the connection is closed or the IPC data is invalid
    *
    * @example
    * ```typescript
-   * import { tableToIPC } from '@uwdata/flechette';
-   * const ipcBuffer = tableToIPC(myArrowTable);
-   * await conn.insertArrowFromIPCStream('my_table', ipcBuffer);
+   * import { tableFromArrays, tableToIPC, utf8 } from '@ducklings/browser';
+   *
+   * const table = tableFromArrays(
+   *   { id: [1, 2, 3], name: ['Alice', 'Bob', 'Charlie'] },
+   *   { types: { name: utf8() } }  // Required for string columns
+   * );
+   * const ipcBuffer = tableToIPC(table, { format: 'stream' });
+   * await conn.insertArrowFromIPCStream('users', ipcBuffer);
    * ```
+   *
+   * @category Data Insertion
    */
   async insertArrowFromIPCStream(tableName: string, ipcBuffer: Uint8Array): Promise<void> {
     this.checkClosed();

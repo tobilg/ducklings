@@ -98,7 +98,7 @@ if [ "$TARGET" = "workers" ]; then
     WORKERS_MEMORY_FLAGS="-s PTHREAD_POOL_SIZE=0"
 
     # Workers needs Asyncify in runtime methods
-    RUNTIME_METHODS="['ccall','cwrap','getValue','setValue','UTF8ToString','stringToUTF8','lengthBytesUTF8','stackAlloc','stackSave','stackRestore','HEAPU8','HEAP8','HEAP16','HEAP32','HEAPU16','HEAPU32','HEAPF32','HEAPF64','Asyncify']"
+    RUNTIME_METHODS="['ccall','cwrap','getValue','setValue','UTF8ToString','stringToUTF8','lengthBytesUTF8','stackAlloc','stackSave','stackRestore','HEAPU8','HEAP8','HEAP16','HEAP32','HEAPU16','HEAPU32','HEAPF32','HEAPF64','FS','Asyncify']"
 
     OUTPUT_SUFFIX="-workers"
 else
@@ -106,7 +106,7 @@ else
     WORKERS_MEMORY_FLAGS=""
 
     # Browser doesn't use Asyncify
-    RUNTIME_METHODS="['ccall','cwrap','getValue','setValue','UTF8ToString','stringToUTF8','lengthBytesUTF8','stackAlloc','stackSave','stackRestore','HEAPU8','HEAP8','HEAP16','HEAP32','HEAPU16','HEAPU32','HEAPF32','HEAPF64']"
+    RUNTIME_METHODS="['ccall','cwrap','getValue','setValue','UTF8ToString','stringToUTF8','lengthBytesUTF8','stackAlloc','stackSave','stackRestore','HEAPU8','HEAP8','HEAP16','HEAP32','HEAPU16','HEAPU32','HEAPF32','HEAPF64','FS']"
 
     OUTPUT_SUFFIX=""
 fi
@@ -114,7 +114,9 @@ fi
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DUCKDB_SRC="${PROJECT_ROOT}/deps/duckdb"
 HTTPFS_SRC="${PROJECT_ROOT}/deps/duckdb-httpfs"
+NANOARROW_SRC="${PROJECT_ROOT}/deps/nanoarrow"
 HTTP_WASM_SRC="${PROJECT_ROOT}/src/http"
+ARROW_IPC_SRC="${PROJECT_ROOT}/src/arrow"
 BUILD_DIR="${PROJECT_ROOT}/build/emscripten"
 DIST_DIR="${PROJECT_ROOT}/dist"
 
@@ -305,6 +307,64 @@ build_http_wasm_client() {
     log_info "WASM HTTP client built!"
 }
 
+bundle_nanoarrow() {
+    log_info "Bundling nanoarrow (with IPC support)..."
+
+    mkdir -p "${BUILD_DIR}/nanoarrow"
+
+    uv run "${NANOARROW_SRC}/ci/scripts/bundle.py" \
+        --source-output-dir="${BUILD_DIR}/nanoarrow" \
+        --include-output-dir="${BUILD_DIR}/nanoarrow" \
+        --with-ipc \
+        --with-flatcc
+
+    log_info "nanoarrow bundled!"
+}
+
+build_nanoarrow() {
+    log_info "Building nanoarrow..."
+
+    cd "${BUILD_DIR}/nanoarrow"
+
+    emcc -Oz -DNDEBUG \
+        -I"${BUILD_DIR}/nanoarrow" \
+        -c nanoarrow.c -o nanoarrow.o
+
+    emcc -Oz -DNDEBUG \
+        -I"${BUILD_DIR}/nanoarrow" \
+        -c nanoarrow_ipc.c -o nanoarrow_ipc.o
+
+    emcc -Oz -DNDEBUG \
+        -I"${BUILD_DIR}/nanoarrow" \
+        -c flatcc.c -o flatcc.o
+
+    emar rcs libnanoarrow.a nanoarrow.o nanoarrow_ipc.o flatcc.o
+
+    cd "${PROJECT_ROOT}"
+    log_info "nanoarrow built!"
+}
+
+build_arrow_ipc_insert() {
+    log_info "Building Arrow IPC insert bridge..."
+
+    mkdir -p "${BUILD_DIR}/arrow_ipc_insert"
+    cd "${BUILD_DIR}/arrow_ipc_insert"
+
+    emcc -Oz \
+        -std=c++17 \
+        -DNDEBUG \
+        -I"${BUILD_DIR}/nanoarrow" \
+        -I"${DUCKDB_SRC}/src/include" \
+        -I"${BUILD_DIR}/src/include" \
+        -c "${ARROW_IPC_SRC}/arrow_ipc_insert.cpp" \
+        -o arrow_ipc_insert.o
+
+    emar rcs libarrow_ipc_insert.a arrow_ipc_insert.o
+
+    cd "${PROJECT_ROOT}"
+    log_info "Arrow IPC insert bridge built!"
+}
+
 find_duckdb_libraries() {
     # Find all required static libraries
     local LIBS=""
@@ -362,6 +422,16 @@ find_duckdb_libraries() {
 
     if [ -f "${BUILD_DIR}/http_wasm/libhttp_wasm.a" ]; then
         LIBS="${LIBS} ${BUILD_DIR}/http_wasm/libhttp_wasm.a"
+    fi
+
+    # Add nanoarrow library (for Arrow IPC decoding)
+    if [ -f "${BUILD_DIR}/nanoarrow/libnanoarrow.a" ]; then
+        LIBS="${LIBS} ${BUILD_DIR}/nanoarrow/libnanoarrow.a"
+    fi
+
+    # Add Arrow IPC insert bridge
+    if [ -f "${BUILD_DIR}/arrow_ipc_insert/libarrow_ipc_insert.a" ]; then
+        LIBS="${LIBS} ${BUILD_DIR}/arrow_ipc_insert/libarrow_ipc_insert.a"
     fi
 
     echo "${LIBS}"
@@ -521,6 +591,7 @@ MAINEOF
         '_duckdb_value_timestamp', \
         '_duckdb_wasm_httpfs_init', \
         '_duckdb_wasm_clear_bindings', \
+        '_duckdb_wasm_insert_arrow_ipc', \
         '_duckdb_create_config', \
         '_duckdb_set_config', \
         '_duckdb_destroy_config', \
@@ -684,6 +755,9 @@ main() {
         build_duckdb
         build_httpfs
         build_http_wasm_client
+        bundle_nanoarrow
+        build_nanoarrow
+        build_arrow_ipc_insert
         link_wasm_module
         print_summary
     fi

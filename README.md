@@ -2,7 +2,7 @@
 
 # Ducklings
 
-A minimal DuckDB WASM build for browsers and serverless environments like Cloudflare Workers.
+A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 
 ## Packages
 
@@ -26,7 +26,7 @@ You can try the browser package in an example  at [https://ducklings.serverless-
 - **Prepared statements**: Secure parameterized queries with full type support
 - **Streaming results**: Memory-efficient chunked data processing
 - **Transactions**: BEGIN/COMMIT/ROLLBACK with wrapper helpers
-- **Arrow support**: Query results as Arrow Tables via [Flechette](https://github.com/uwdata/flechette)
+- **Arrow support**: Query results as Arrow Tables, insert data via Arrow IPC streams, powered by [Flechette](https://github.com/uwdata/flechette)
 - **Parquet support**: Read Parquet files with built-in extension
 - **httpfs support**: Load remote files via HTTP/HTTPS
 - **JSON support**: Native JSON functions and `read_json()` for JSON files
@@ -43,6 +43,7 @@ You can try the browser package in an example  at [https://ducklings.serverless-
 | Transactions | :white_check_mark: |
 | Streaming results | :white_check_mark: |
 | Arrow Table results | :white_check_mark: |
+| Arrow IPC insert | :white_check_mark: |
 | Parquet extension | :white_check_mark: |
 | httpfs extension | :white_check_mark: |
 | JSON extension | :white_check_mark: |
@@ -178,6 +179,12 @@ const table = tableFromIPC(bytes);
 import { init } from '@ducklings/browser';
 await init();
 
+// Browser with Vite - use ?url imports for reliable asset resolution
+import wasmUrl from '@ducklings/browser/wasm/duckdb.wasm?url';
+import wasmJsUrl from '@ducklings/browser/wasm/duckdb.js?url';
+import workerUrl from '@ducklings/browser/worker?url';
+await init({ wasmUrl, wasmJsUrl, workerUrl });
+
 // Browser - custom WASM URL
 await init('/path/to/duckdb.wasm');
 
@@ -297,6 +304,14 @@ const table = await conn.queryArrow('SELECT * FROM users');
 // Execute statement without returning results
 await conn.execute('INSERT INTO users VALUES (1, "Alice")');
 
+// Insert Arrow IPC data into a table
+import { tableFromArrays, tableToIPC, utf8 } from '@ducklings/browser';
+const arrow = tableFromArrays(
+  { id: [1, 2], name: ['Alice', 'Bob'] },
+  { types: { name: utf8() } }
+);
+await conn.insertArrowFromIPCStream('users', tableToIPC(arrow, { format: 'stream' }));
+
 // Close the connection
 await conn.close();
 ```
@@ -413,7 +428,7 @@ for await (const chunk of stream) {
 ### Arrow Support (Flechette)
 
 ```typescript
-import { tableFromArrays, tableFromIPC, tableToIPC } from '@ducklings/browser';
+import { tableFromArrays, tableFromIPC, tableToIPC, utf8 } from '@ducklings/browser';
 
 // Query as Arrow Table
 const table = await conn.queryArrow('SELECT i, i*2 AS doubled FROM range(5) t(i)');
@@ -430,7 +445,24 @@ const custom = tableFromArrays({
 // Serialize to/from Arrow IPC
 const bytes = tableToIPC(table);
 const restored = tableFromIPC(bytes);
+
+// Insert Arrow IPC data directly into a table
+const data = tableFromArrays(
+  { id: [1, 2, 3], label: ['a', 'b', 'c'] },
+  { types: { label: utf8() } }  // Use plain utf8 (see note below)
+);
+const ipc = tableToIPC(data, { format: 'stream' });
+await conn.insertArrowFromIPCStream('my_table', ipc);
 ```
+
+> **Dictionary encoding:** Flechette's `tableFromArrays()` infers `dictionary(utf8())` for string columns by default. The Arrow IPC decoder used by `insertArrowFromIPCStream()` does not support dictionary-encoded IPC streams. When building tables for insertion, explicitly set string columns to `utf8()` via the `types` option:
+> ```typescript
+> import { utf8 } from '@ducklings/browser'; // or '@ducklings/workers'
+> const table = tableFromArrays(
+>   { name: ['Alice', 'Bob'] },
+>   { types: { name: utf8() } }
+> );
+> ```
 
 ### Remote Files (httpfs)
 

@@ -1,6 +1,6 @@
 ![ducklings logo](assets/logo.png)
 
-A minimal DuckDB WASM binding for browsers and serverless environments.
+A minimal DuckDB WASM binding for browsers and Cloudflare Workers.
 
 ## Packages
 

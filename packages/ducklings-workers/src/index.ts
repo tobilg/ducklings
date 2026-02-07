@@ -2,7 +2,7 @@
  * Ducklings Workers - Minimal DuckDB for Cloudflare Workers
  *
  * This package provides a lightweight DuckDB binding for WebAssembly,
- * designed for Cloudflare Workers and serverless environments.
+ * designed for Cloudflare Workers.
  *
  * IMPORTANT: In this build, query() and execute() are async and return Promises.
  * Always use: `await conn.query(...)` or `await conn.execute(...)`
@@ -1384,6 +1384,21 @@ export class StreamingResult implements Iterable<DataChunk> {
     return allRows;
   }
 
+  /**
+   * Converts the streaming result into a Flechette Arrow Table.
+   *
+   * Reads all remaining chunks and aggregates them into a single Arrow table.
+   * DuckDB column types are mapped to the corresponding Flechette types.
+   *
+   * @returns A Flechette {@link Table} containing all result data
+   *
+   * @example
+   * ```typescript
+   * const stream = conn.queryStreaming('SELECT * FROM large_table');
+   * const arrowTable = stream.toArrowTable();
+   * console.log(arrowTable.numRows);
+   * ```
+   */
   toArrowTable(): Table {
     const columnData: Record<string, unknown[]> = {};
     const types: Record<string, DataType> = {};
@@ -2309,6 +2324,59 @@ export class Connection {
     } catch (e) {
       await this.rollback();
       throw e;
+    }
+  }
+
+  /**
+   * Insert data from an Arrow IPC stream buffer into a table.
+   *
+   * Creates a new table with the given name from the Arrow IPC data. If the table
+   * already exists, the call is a no-op (uses `CREATE TABLE IF NOT EXISTS`).
+   *
+   * **Important:** The IPC stream must not contain dictionary-encoded columns.
+   * Flechette's `tableFromArrays()` defaults to `dictionary(utf8())` for string
+   * columns. Use explicit `utf8()` types to avoid this:
+   *
+   * @param tableName - The name of the table to create
+   * @param ipcBuffer - Arrow IPC stream bytes (use `tableToIPC(table, { format: 'stream' })`)
+   * @throws {@link DuckDBError} If the connection is closed or the IPC data is invalid
+   *
+   * @example
+   * ```typescript
+   * import { tableFromArrays, tableToIPC, utf8 } from '@ducklings/workers';
+   *
+   * const table = tableFromArrays(
+   *   { id: [1, 2, 3], name: ['Alice', 'Bob', 'Charlie'] },
+   *   { types: { name: utf8() } }  // Required for string columns
+   * );
+   * const ipcBuffer = tableToIPC(table, { format: 'stream' });
+   * await conn.insertArrowFromIPCStream('users', ipcBuffer);
+   * ```
+   *
+   * @category Data Insertion
+   */
+  async insertArrowFromIPCStream(tableName: string, ipcBuffer: Uint8Array): Promise<void> {
+    if (this.closed || !module) {
+      throw new DuckDBError('Connection is closed');
+    }
+
+    const bufPtr = module._malloc(ipcBuffer.length);
+    module.HEAPU8.set(ipcBuffer, bufPtr);
+
+    try {
+      const result = (await module.ccall(
+        'duckdb_wasm_insert_arrow_ipc',
+        'number',
+        ['number', 'string', 'number', 'number'],
+        [this.connPtr, tableName, bufPtr, ipcBuffer.length],
+        { async: true },
+      )) as number;
+
+      if (result !== 0) {
+        throw new DuckDBError(`Failed to insert Arrow IPC data into "${tableName}"`);
+      }
+    } finally {
+      module._free(bufPtr);
     }
   }
 

@@ -8,3 +8,6 @@
 	url = https://github.com/duckdb/duckdb-httpfs.git
     # Match DuckDB v1.4.3 compatible version
 
+[submodule "deps/nanoarrow"]
+	path = deps/nanoarrow
+	url = https://github.com/apache/arrow-nanoarrow.git

@@ -1274,26 +1274,25 @@ export class DuckDBDispatcher {
   // ============================================================================
 
   private handleInsertArrowFromIPC(requestId: number, data: InsertArrowFromIPCRequest): void {
-    // For now, write IPC to temp file and use COPY
-    // A more efficient implementation would use the Arrow API directly
     const mod = this.getModule();
-    const tempPath = `/_temp_arrow_${Date.now()}.arrow`;
+    const connPtr = this.getConnectionPtr(data.connectionId);
 
-    (
-      mod as unknown as { FS: { writeFile: (path: string, data: Uint8Array) => void } }
-    ).FS.writeFile(tempPath, data.ipcBuffer);
+    const bufPtr = mod._malloc(data.ipcBuffer.length);
+    mod.HEAPU8.set(data.ipcBuffer, bufPtr);
 
     try {
-      this.executeSQL(
-        data.connectionId,
-        `CREATE TABLE IF NOT EXISTS "${data.tableName}" AS SELECT * FROM '${tempPath}'`,
-      );
-    } finally {
-      try {
-        (mod as unknown as { FS: { unlink: (path: string) => void } }).FS.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
+      const result = mod.ccall(
+        'duckdb_wasm_insert_arrow_ipc',
+        'number',
+        ['number', 'string', 'number', 'number'],
+        [connPtr, data.tableName, bufPtr, data.ipcBuffer.length],
+      ) as number;
+
+      if (result !== 0) {
+        throw new Error(`Failed to insert Arrow IPC data into "${data.tableName}"`);
       }
+    } finally {
+      mod._free(bufPtr);
     }
 
     this.postOK(requestId);
