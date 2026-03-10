@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/workers",
-  "version": "1.4.4-dev.1",
+  "version": "1.5.0",
   "description": "Minimal DuckDB WASM for Cloudflare Workers",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -41,17 +41,17 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "@uwdata/flechette": "^2.2.6"
+    "@uwdata/flechette": "^2.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.11",
-    "@cloudflare/workers-types": "^4.20260111.0",
-    "@types/node": "^22",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@biomejs/biome": "^2.4.6",
+    "@cloudflare/workers-types": "^4.20260310.1",
+    "@types/node": "^25.4.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.15",
+    "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.18"
   },
   "peerDependencies": {
     "vite": "^5.0.0 || ^6.0.0 || ^7.0.0"

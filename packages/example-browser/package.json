@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/example-browser",
-  "version": "1.4.4-dev.1",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,8 +13,8 @@
     "@ducklings/browser": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "wrangler": "^4.58.0"
+    "wrangler": "^4.71.0"
   }
 }

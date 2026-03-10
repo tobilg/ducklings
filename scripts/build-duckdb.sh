@@ -41,10 +41,22 @@ if [ "$TARGET" = "workers" ]; then
     # Specify which JS imports can cause async operations
     ASYNCIFY_IMPORTS="['em_async_head_request','em_async_request']"
 
+    # Asyncify function list using ASYNCIFY_ONLY (strict whitelist).
+    # Only matched functions get instrumented — no transitive propagation.
+    # This keeps the workers binary under 10MB gzipped.
+    #
+    # Patterns cover the full call chain from C API → query execution →
+    # file system → HTTP fetch, including Thrift (parquet metadata),
+    # CSV buffer management, and Emscripten exception handling trampolines.
     ASYNCIFY_ADD="["
-    # HTTP layer
+    # Emscripten runtime wrappers (dynCall_* = indirect call trampolines in WASM,
+    # legalstub/legalfunc = i64 legalization wrappers)
+    ASYNCIFY_ADD+="'dynCall_*',"
+    ASYNCIFY_ADD+="'legalstub*',"
+    ASYNCIFY_ADD+="'legalfunc*',"
+    # HTTP/httpfs layer
     ASYNCIFY_ADD+="'*HTTP*',"
-    ASYNCIFY_ADD+="'*httpfs*',"
+    ASYNCIFY_ADD+="'*S3*',"
     # File system layer
     ASYNCIFY_ADD+="'*FileSystem*',"
     ASYNCIFY_ADD+="'*FileHandle*',"
@@ -52,9 +64,24 @@ if [ "$TARGET" = "workers" ]; then
     ASYNCIFY_ADD+="'*BufferedFile*',"
     ASYNCIFY_ADD+="'*FileReader*',"
     ASYNCIFY_ADD+="'*FileOpener*',"
+    # Thrift protocol layer (parquet metadata reads over HTTP)
+    ASYNCIFY_ADD+="'*Thrift*',"
+    ASYNCIFY_ADD+="'*TCompactProtocol*',"
+    ASYNCIFY_ADD+="'*TVirtualTransport*',"
+    ASYNCIFY_ADD+="'*TTransport*',"
     # Parquet/file reading
     ASYNCIFY_ADD+="'*Parquet*',"
     ASYNCIFY_ADD+="'*MultiFile*',"
+    ASYNCIFY_ADD+="'*CachingFile*',"
+    # CSV buffer layer (remote CSV reading)
+    ASYNCIFY_ADD+="'*CSVBuffer*',"
+    ASYNCIFY_ADD+="'*CSVFileHandle*',"
+    ASYNCIFY_ADD+="'*StringValueScanner*',"
+    ASYNCIFY_ADD+="'*BaseScanner*',"
+    # JSON reader
+    ASYNCIFY_ADD+="'*JSONReader*',"
+    ASYNCIFY_ADD+="'*JSONFileHandle*',"
+    ASYNCIFY_ADD+="'*JSONScan*',"
     # Query execution - operators
     ASYNCIFY_ADD+="'*Operator*',"
     ASYNCIFY_ADD+="'*Physical*',"
@@ -64,34 +91,36 @@ if [ "$TARGET" = "workers" ]; then
     ASYNCIFY_ADD+="'*Pipeline*',"
     ASYNCIFY_ADD+="'*Task*',"
     ASYNCIFY_ADD+="'*Execute*',"
-    # Data handling
-    ASYNCIFY_ADD+="'*DataChunk*',"
-    ASYNCIFY_ADD+="'*Vector*',"
-    ASYNCIFY_ADD+="'*Column*',"
     # Table functions
     ASYNCIFY_ADD+="'*TableFunction*',"
     ASYNCIFY_ADD+="'*Function*Data*',"
     ASYNCIFY_ADD+="'*BindData*',"
     ASYNCIFY_ADD+="'*GlobalState*',"
     ASYNCIFY_ADD+="'*LocalState*',"
-    # Data flow
+    # Data flow through operators
     ASYNCIFY_ADD+="'*Source*',"
     ASYNCIFY_ADD+="'*Sink*',"
     ASYNCIFY_ADD+="'*GetData*',"
     ASYNCIFY_ADD+="'*GetChunk*',"
     ASYNCIFY_ADD+="'*Fetch*',"
     ASYNCIFY_ADD+="'*Read*',"
+    ASYNCIFY_ADD+="'*read*',"
     ASYNCIFY_ADD+="'*Next*',"
+    # Query binding (Binder is on the call stack when replacement scans trigger HTTP)
+    ASYNCIFY_ADD+="'*Binder*',"
+    ASYNCIFY_ADD+="'*Bound*',"
     # Client context
     ASYNCIFY_ADD+="'*ClientContext*',"
     ASYNCIFY_ADD+="'*Connection*',"
-    ASYNCIFY_ADD+="'*Database*',"
     # Query processing
     ASYNCIFY_ADD+="'*Query*',"
+    ASYNCIFY_ADD+="'*query*',"
     ASYNCIFY_ADD+="'*Statement*',"
-    ASYNCIFY_ADD+="'*Result*'"
+    ASYNCIFY_ADD+="'*Pending*',"
+    # C API entry points
+    ASYNCIFY_ADD+="'*duckdb_*'"
     ASYNCIFY_ADD+="]"
-    ASYNCIFY_FLAGS="-sASYNCIFY -sASYNCIFY_STACK_SIZE=131072 -sASYNCIFY_IMPORTS=${ASYNCIFY_IMPORTS} -sASYNCIFY_ADD=${ASYNCIFY_ADD} -sASYNCIFY_PROPAGATE_ADD"
+    ASYNCIFY_FLAGS="-sASYNCIFY -sASYNCIFY_STACK_SIZE=131072 -sASYNCIFY_IMPORTS=${ASYNCIFY_IMPORTS} -sASYNCIFY_ONLY=${ASYNCIFY_ADD}"
 
     # Workers-specific memory/thread settings
     # CF Workers has 128MB memory limit (256MB on paid plans), no threading
@@ -251,6 +280,7 @@ build_httpfs() {
     HTTPFS_SOURCES=(
         "hffs.cpp"
         "s3fs.cpp"
+        "s3_multi_part_upload.cpp"
         "httpfs.cpp"
         "http_state.cpp"
         "httpfs_extension.cpp"
@@ -451,11 +481,10 @@ link_wasm_module() {
 #include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
+#include "duckdb/main/extension_helper.hpp"
 #include "httpfs.hpp"
 #include "httpfs_extension.hpp"
 #include "http_wasm.hpp"
-#include "json_extension.hpp"
-#include "parquet_extension.hpp"
 
 namespace duckdb {
 
@@ -466,7 +495,9 @@ bool preloaded_httpfs = true;
 
 extern "C" {
 
-// Initialize all statically linked extensions for WASM - must be called after duckdb_open
+// Initialize httpfs extension for WASM - must be called after duckdb_open
+// Note: json, parquet, core_functions are loaded automatically by DuckDB's
+// generated extension loader (LoadAllExtensions) during database startup.
 void duckdb_wasm_httpfs_init(duckdb_database db) {
     if (!db) return;
 
@@ -485,27 +516,11 @@ void duckdb_wasm_httpfs_init(duckdb_database db) {
             config.http_util = duckdb::make_shared_ptr<duckdb::HTTPWasmUtil>();
         }
 
-        // Load httpfs extension
+        // Load httpfs extension manually (not in CMake-generated loader)
         // This registers all file systems (HTTP, S3, HuggingFace) and secret types (s3, aws, r2, gcs)
         {
             duckdb::ExtensionLoader loader(*duckdb_instance.instance, "httpfs");
             duckdb::HttpfsExtension extension;
-            extension.Load(loader);
-        }
-
-        // Load json extension
-        // This registers JSON type alias and all JSON functions
-        {
-            duckdb::ExtensionLoader loader(*duckdb_instance.instance, "json");
-            duckdb::JsonExtension extension;
-            extension.Load(loader);
-        }
-
-        // Load parquet extension
-        // This registers Parquet reader/writer and related functions
-        {
-            duckdb::ExtensionLoader loader(*duckdb_instance.instance, "parquet");
-            duckdb::ParquetExtension extension;
             extension.Load(loader);
         }
 
@@ -626,8 +641,11 @@ MAINEOF
         -I"${BUILD_DIR}/src/include" \
         -I"${HTTPFS_SRC}/src/include" \
         -I"${HTTP_WASM_SRC}" \
+        -I"${BUILD_DIR}/codegen/include" \
+        -I"${DUCKDB_SRC}/extension/core_functions/include" \
         -I"${DUCKDB_SRC}/extension/json/include" \
         -I"${DUCKDB_SRC}/extension/parquet/include" \
+        -DGENERATED_EXTENSION_HEADERS \
         -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
         -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
         -I"${DUCKDB_SRC}/third_party/re2" \
@@ -652,6 +670,7 @@ MAINEOF
         -s EXPORTED_RUNTIME_METHODS="${RUNTIME_METHODS}" \
         -o "${DIST_DIR}/duckdb${OUTPUT_SUFFIX}.js" \
         "${BUILD_DIR}/main.cpp" \
+        "${BUILD_DIR}/codegen/src/generated_extension_loader.cpp" \
         ${DUCKDB_LIBS}
 
     # Patch for Cloudflare Workers compatibility

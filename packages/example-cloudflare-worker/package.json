@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/example-cloudflare-worker",
-  "version": "1.4.4-dev.1",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,10 +13,10 @@
     "@ducklings/workers": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.20.3",
-    "@cloudflare/workers-types": "^4.20260111.0",
+    "@cloudflare/vite-plugin": "^1.26.1",
+    "@cloudflare/workers-types": "^4.20260310.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "wrangler": "^4.59.1"
+    "wrangler": "^4.71.0"
   }
 }

@@ -6,23 +6,25 @@ DIST_DIR := dist
 
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
-DUCKDB_VERSION := v1.4.4
-NANOARROW_VERSION := apache-arrow-nanoarrow-0.7.0
-VERSION_SUFFIX := -dev.1
+DUCKDB_VERSION := v1.5.0
+DUCKDB_HTTPFS_VERSION := c2f3f4cf3fc1eb511c1f8bc2a9b178207762b403
+NANOARROW_VERSION := apache-arrow-nanoarrow-0.8.0
+VERSION_SUFFIX := 
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 .PHONY: all clean deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-all typescript typescript-browser typescript-workers typescript-all check-deps show-versions example help
 
-all: check-deps deps duckdb typescript
+all: check-deps deps duckdb-all typescript-all
 
 # Initialize submodules and pin to specific versions
 deps:
-	git submodule update --init --recursive
+	git submodule init
 	$(MAKE) pin-versions
 
 # Pin all dependencies to exact versions for reproducible builds
 pin-versions:
 	cd deps/duckdb && git fetch --tags && git checkout $(DUCKDB_VERSION)
+	cd deps/duckdb-httpfs && git fetch origin && git checkout $(DUCKDB_HTTPFS_VERSION)
 	cd deps/nanoarrow && git fetch --tags && git checkout $(NANOARROW_VERSION)
 
 # Sync npm package versions to match DUCKDB_VERSION

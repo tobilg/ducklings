@@ -142,6 +142,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
               '/orders': 'GET - List all orders',
               '/stats': 'GET - Order statistics by user',
               '/remote-parquet': 'GET - Query remote Parquet file via httpfs',
+              '/remote-csv': 'GET - Query remote CSV file via httpfs',
+              '/remote-json': 'GET - Query remote JSON API via httpfs',
               '/json': 'GET - Demonstrate JSON functions',
             },
           }),
@@ -308,6 +310,42 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             source: 'https://raw.githubusercontent.com/tobilg/aws-edge-locations/main/data/aws-edge-locations.parquet',
             data: remoteData,
             rowCount: remoteData.length,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          }
+        );
+
+      case '/remote-csv':
+        // Demonstrate querying a remote CSV file via httpfs
+        const remoteCsvData = await conn!.query(`
+          SELECT *
+          FROM read_csv_auto('https://raw.githubusercontent.com/tobilg/public-cloud-provider-ip-ranges/main/data/providers/cloudflare.csv')
+        `);
+        return new Response(
+          JSON.stringify({
+            description: 'Remote CSV file query via httpfs',
+            source: 'https://raw.githubusercontent.com/tobilg/public-cloud-provider-ip-ranges/main/data/providers/cloudflare.csv',
+            data: remoteCsvData,
+            rowCount: remoteCsvData.length,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          }
+        );
+
+      case '/remote-json':
+        // Demonstrate querying a remote JSON API via httpfs
+        const remoteJsonData = await conn!.query(`
+          SELECT *
+          FROM read_json('https://api.tvmaze.com/search/shows?q=duck', auto_detect=true)
+        `);
+        return new Response(
+          JSON.stringify({
+            description: 'Remote JSON API query via httpfs',
+            source: 'https://api.tvmaze.com/search/shows?q=duck',
+            data: remoteJsonData,
+            rowCount: remoteJsonData.length,
           }),
           {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
