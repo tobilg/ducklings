@@ -230,6 +230,54 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  # Deploy browser example to Cloudflare Pages
+  deploy-example-browser:
+    runs-on: ubuntu-latest
+    needs: [version, browser]
+    if: ${{ needs.version.outputs.dry_run != 'true' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Download browser WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: duckdb-browser-dist
+          path: dist
+
+      - name: Sync package versions
+        run: make sync-versions VERSION_SUFFIX="${{ needs.version.outputs.suffix }}"
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build browser package
+        run: pnpm --filter @ducklings/browser build
+
+      - name: Build example
+        run: pnpm --filter @ducklings/example-browser build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy
+          workingDirectory: packages/example-browser
+
   release:
     runs-on: ubuntu-latest
     needs: [version, browser, workers]
