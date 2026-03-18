@@ -8,7 +8,7 @@
     "predev": "pnpm run check-deps",
     "prebuild": "pnpm run check-deps",
     "build": "vite build",
-    "dev": "vite dev",
+    "dev": "wrangler dev",
     "deploy": "vite build && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
