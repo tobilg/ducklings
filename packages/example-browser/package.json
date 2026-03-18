@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check-deps": "test -f ../ducklings-browser/dist/index.js || (echo 'Error: @ducklings/browser has not been built yet.' && echo 'Run the following from the repo root first:' && echo '' && echo '  make duckdb-browser    # compile WASM (~2 min)' && echo '  make typescript-browser # build TypeScript package' && exit 1)",
+    "predev": "pnpm run check-deps",
     "dev": "vite",
+    "prebuild": "pnpm run check-deps",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "pnpm run build && wrangler pages deploy"
