@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/example-cloudflare-worker",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,8 +8,8 @@
     "predev": "pnpm run check-deps",
     "prebuild": "pnpm run check-deps",
     "build": "vite build",
-    "dev": "wrangler dev",
-    "deploy": "vite build && wrangler deploy",
+    "dev": "pnpm run build && wrangler dev",
+    "deploy": "pnpm run build && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

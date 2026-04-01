@@ -7,8 +7,6 @@ mergeInto(LibraryManager.library, {
     em_async_head_request: function(url_ptr, header_count, header_array) {
         var url = UTF8ToString(url_ptr);
 
-        console.log("em_async_head_request called for:", url);
-
         // Parse headers from the header array (must be done synchronously before Asyncify)
         var headers = {};
         for (var i = 0; i < header_count * 2; i += 2) {
@@ -25,46 +23,66 @@ mergeInto(LibraryManager.library, {
             }
         }
 
-        console.log("Fetching HEAD", url, "with headers:", JSON.stringify(headers));
-
         return Asyncify.handleAsync(function() {
             return fetch(url, {
                 method: "HEAD",
                 headers: headers
             }).then(function(response) {
-                console.log("HEAD response received, status:", response.status, response.statusText);
-
-                if (!response.ok) {
-                    console.error("HEAD error:", response.status, response.statusText);
-                    return 0;
-                }
-
                 // Build response headers string
                 var responseHeaders = "";
                 response.headers.forEach(function(value, name) {
                     responseHeaders += name + ": " + value + "\r\n";
                 });
-                console.log("Response headers length:", responseHeaders.length);
 
-                // Copy to WASM memory
                 var headerBytes = new TextEncoder().encode(responseHeaders);
-                var len = headerBytes.length;
-                var resultPtr = _malloc(len + 4);
+                var headerLen = headerBytes.length;
+                var resultPtr = _malloc(12 + headerLen);
 
-                // Store length (little-endian)
-                HEAPU8[resultPtr] = len & 0xFF;
-                HEAPU8[resultPtr + 1] = (len >> 8) & 0xFF;
-                HEAPU8[resultPtr + 2] = (len >> 16) & 0xFF;
-                HEAPU8[resultPtr + 3] = (len >> 24) & 0xFF;
+                // Packet layout:
+                // [0..3]   status code
+                // [4..7]   header length
+                // [8..11]  body length (always 0 for HEAD)
+                HEAPU8[resultPtr] = response.status & 0xFF;
+                HEAPU8[resultPtr + 1] = (response.status >> 8) & 0xFF;
+                HEAPU8[resultPtr + 2] = (response.status >> 16) & 0xFF;
+                HEAPU8[resultPtr + 3] = (response.status >> 24) & 0xFF;
 
-                // Copy header data
-                HEAPU8.set(headerBytes, resultPtr + 4);
+                HEAPU8[resultPtr + 4] = headerLen & 0xFF;
+                HEAPU8[resultPtr + 5] = (headerLen >> 8) & 0xFF;
+                HEAPU8[resultPtr + 6] = (headerLen >> 16) & 0xFF;
+                HEAPU8[resultPtr + 7] = (headerLen >> 24) & 0xFF;
 
-                console.log("em_async_head_request returning ptr:", resultPtr);
+                HEAPU8[resultPtr + 8] = 0;
+                HEAPU8[resultPtr + 9] = 0;
+                HEAPU8[resultPtr + 10] = 0;
+                HEAPU8[resultPtr + 11] = 0;
+
+                HEAPU8.set(headerBytes, resultPtr + 12);
+
                 return resultPtr;
             }).catch(function(error) {
                 console.error("Fetch HEAD error:", error.name, error.message, error.stack);
-                return 0;
+                var errorBytes = new TextEncoder().encode(error && error.message ? error.message : "HEAD request failed");
+                var resultPtr = _malloc(12 + errorBytes.length);
+
+                // status = 0 signals a request-level error
+                HEAPU8[resultPtr] = 0;
+                HEAPU8[resultPtr + 1] = 0;
+                HEAPU8[resultPtr + 2] = 0;
+                HEAPU8[resultPtr + 3] = 0;
+
+                HEAPU8[resultPtr + 4] = 0;
+                HEAPU8[resultPtr + 5] = 0;
+                HEAPU8[resultPtr + 6] = 0;
+                HEAPU8[resultPtr + 7] = 0;
+
+                HEAPU8[resultPtr + 8] = errorBytes.length & 0xFF;
+                HEAPU8[resultPtr + 9] = (errorBytes.length >> 8) & 0xFF;
+                HEAPU8[resultPtr + 10] = (errorBytes.length >> 16) & 0xFF;
+                HEAPU8[resultPtr + 11] = (errorBytes.length >> 24) & 0xFF;
+                HEAPU8.set(errorBytes, resultPtr + 12);
+
+                return resultPtr;
             });
         });
     },
@@ -74,8 +92,6 @@ mergeInto(LibraryManager.library, {
     em_async_request: function(url_ptr, method_ptr, header_count, header_array, body_ptr, body_len) {
         var url = UTF8ToString(url_ptr);
         var method = UTF8ToString(method_ptr);
-
-        console.log("em_async_request called:", method, url);
 
         // Parse headers (must be done synchronously before Asyncify)
         var headers = {};
@@ -92,7 +108,8 @@ mergeInto(LibraryManager.library, {
             }
         }
 
-        // Prepare fetch options
+        // Prepare fetch options — use plain object for headers to preserve empty values
+        // (the Headers API drops empty-string values, breaking S3 signature verification)
         var fetchOptions = {
             method: method,
             headers: headers
@@ -107,42 +124,84 @@ mergeInto(LibraryManager.library, {
             fetchOptions.body = bodyData;
         }
 
-        console.log("Fetching", method, url);
-
+        console.log(">>", method, url.substring(url.lastIndexOf('/') + 1));
         return Asyncify.handleAsync(function() {
             return fetch(url, fetchOptions).then(function(response) {
-                console.log("Response status:", response.status);
-
-                if (!response.ok && method !== "HEAD") {
-                    console.error("Request error:", response.status, response.statusText);
-                    return 0;
-                }
-
-                // Get response body
                 return response.arrayBuffer().then(function(responseBody) {
+                    if (method !== "GET" || !response.ok) {
+                        console.log("<<", method, response.status, url.substring(url.lastIndexOf('/')));
+                    }
+
                     var bodyBytes = new Uint8Array(responseBody);
-                    var len = bodyBytes.length;
+                    var bodyLen = bodyBytes.length;
+                    var responseHeaders = "";
+                    response.headers.forEach(function(value, name) {
+                        responseHeaders += name + ": " + value + "\r\n";
+                    });
+                    var headerBytes = new TextEncoder().encode(responseHeaders);
+                    var headerLen = headerBytes.length;
 
-                    console.log("Response body length:", len);
+                    if (!response.ok) {
+                        var errBody = "";
+                        try {
+                            errBody = new TextDecoder().decode(bodyBytes.subarray(0, Math.min(bodyLen, 500)));
+                        } catch (_error) {
+                            errBody = "<non-text response body>";
+                        }
+                        console.error("HTTP error:", method, url.substring(url.lastIndexOf('/')), response.status, errBody);
+                    }
 
-                    // Allocate memory: 4 bytes for length + body
-                    var resultPtr = _malloc(len + 4);
+                    // Packet layout:
+                    // [0..3]   status code
+                    // [4..7]   header length
+                    // [8..11]  body length
+                    // [12..]   header bytes, then body bytes
+                    var resultPtr = _malloc(12 + headerLen + bodyLen);
 
-                    // Store length (little-endian)
-                    HEAPU8[resultPtr] = len & 0xFF;
-                    HEAPU8[resultPtr + 1] = (len >> 8) & 0xFF;
-                    HEAPU8[resultPtr + 2] = (len >> 16) & 0xFF;
-                    HEAPU8[resultPtr + 3] = (len >> 24) & 0xFF;
+                    HEAPU8[resultPtr] = response.status & 0xFF;
+                    HEAPU8[resultPtr + 1] = (response.status >> 8) & 0xFF;
+                    HEAPU8[resultPtr + 2] = (response.status >> 16) & 0xFF;
+                    HEAPU8[resultPtr + 3] = (response.status >> 24) & 0xFF;
 
-                    // Copy body data
-                    HEAPU8.set(bodyBytes, resultPtr + 4);
+                    HEAPU8[resultPtr + 4] = headerLen & 0xFF;
+                    HEAPU8[resultPtr + 5] = (headerLen >> 8) & 0xFF;
+                    HEAPU8[resultPtr + 6] = (headerLen >> 16) & 0xFF;
+                    HEAPU8[resultPtr + 7] = (headerLen >> 24) & 0xFF;
 
-                    console.log("em_async_request returning ptr:", resultPtr);
+                    HEAPU8[resultPtr + 8] = bodyLen & 0xFF;
+                    HEAPU8[resultPtr + 9] = (bodyLen >> 8) & 0xFF;
+                    HEAPU8[resultPtr + 10] = (bodyLen >> 16) & 0xFF;
+                    HEAPU8[resultPtr + 11] = (bodyLen >> 24) & 0xFF;
+
+                    HEAPU8.set(headerBytes, resultPtr + 12);
+                    HEAPU8.set(bodyBytes, resultPtr + 12 + headerLen);
+
                     return resultPtr;
                 });
             }).catch(function(error) {
                 console.error("Fetch error:", error.name, error.message, error.stack);
-                return 0;
+                var errorBytes = new TextEncoder().encode(error && error.message ? error.message : "Request failed");
+                var bodyLen = errorBytes.length;
+                var resultPtr = _malloc(12 + bodyLen);
+
+                // status = 0 signals a request-level error so DuckDB retries
+                HEAPU8[resultPtr] = 0;
+                HEAPU8[resultPtr + 1] = 0;
+                HEAPU8[resultPtr + 2] = 0;
+                HEAPU8[resultPtr + 3] = 0;
+
+                HEAPU8[resultPtr + 4] = 0;
+                HEAPU8[resultPtr + 5] = 0;
+                HEAPU8[resultPtr + 6] = 0;
+                HEAPU8[resultPtr + 7] = 0;
+
+                HEAPU8[resultPtr + 8] = bodyLen & 0xFF;
+                HEAPU8[resultPtr + 9] = (bodyLen >> 8) & 0xFF;
+                HEAPU8[resultPtr + 10] = (bodyLen >> 16) & 0xFF;
+                HEAPU8[resultPtr + 11] = (bodyLen >> 24) & 0xFF;
+                HEAPU8.set(errorBytes, resultPtr + 12);
+
+                return resultPtr;
             });
         });
     },
@@ -150,5 +209,12 @@ mergeInto(LibraryManager.library, {
     // Check if we're in a browser environment (has XMLHttpRequest)
     em_has_xhr: function() {
         return (typeof XMLHttpRequest !== "undefined") ? 1 : 0;
+    },
+
+    // Debug: called when Asyncify detects an unreachable instruction
+    em_asyncify_stop_unwind: function() {
+        console.error("Asyncify: stop_unwind called, state:", Asyncify.state);
+        var err = new Error();
+        console.error("JS stack:", err.stack);
     }
 });

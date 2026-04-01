@@ -48,6 +48,10 @@ async function ensureInitialized(env: Env): Promise<void> {
     db = new DuckDB({
       accessMode: AccessMode.READ_WRITE,
       lockConfiguration: true,
+      customConfig: {
+        memory_limit: '100MB',
+        preserve_insertion_order: 'false',
+      },
     });
     conn = db.connect();
 
@@ -194,17 +198,30 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         }
 
         // Note: query() is async in workers build
-        const queryResult = await conn!.query(body.sql);
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: queryResult,
-            rowCount: queryResult.length,
-          }),
-          {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          }
-        );
+        try {
+          const queryResult = await conn!.query(body.sql);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: queryResult,
+              rowCount: queryResult.length,
+            }),
+            {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders },
+            }
+          );
+        } catch (queryError) {
+          // Rollback any broken transaction to keep the connection usable
+          try { await conn!.execute('ROLLBACK'); } catch { /* ignore if no active transaction */ }
+          const msg = queryError instanceof Error ? queryError.message : 'Query failed';
+          return new Response(
+            JSON.stringify({ error: msg }),
+            {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders },
+            }
+          );
+        }
 
       case '/arrow':
         // Return query results as Arrow IPC stream

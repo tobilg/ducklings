@@ -14,7 +14,7 @@ jobs:
   # Build WASM (browser and workers)
   build-wasm:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -31,13 +31,20 @@ jobs:
       - name: Verify
         run: emcc -v
 
+      - name: Cache vcpkg installed packages
+        id: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-wasm32-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg_ports/**') }}
+
       - name: Cache DuckDB build
         id: cache-duckdb
         uses: actions/cache@v4
         with:
           path: |
             build/emscripten
-          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**') }}
+          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**', 'vcpkg.json', 'vcpkg_ports/**') }}
           restore-keys: |
             duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
 

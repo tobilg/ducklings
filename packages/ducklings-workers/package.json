@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/workers",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Minimal DuckDB WASM for Cloudflare Workers",
   "type": "module",
   "main": "./dist/index.cjs",

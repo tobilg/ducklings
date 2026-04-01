@@ -1,25 +1,34 @@
 diff --git a/src/include/duckdb/main/database.hpp b/src/include/duckdb/main/database.hpp
+index 83795046ad..f84685141c 100644
 --- a/src/include/duckdb/main/database.hpp
 +++ b/src/include/duckdb/main/database.hpp
-@@ -17,7 +17,9 @@
- #include "duckdb/main/extension_manager.hpp"
+@@ -18,6 +18,10 @@
  
  namespace duckdb {
  
 +extern bool preloaded_httpfs;
++extern bool preloaded_avro;
++extern bool preloaded_iceberg;
 +
  class BufferManager;
  class DatabaseManager;
  class StorageManager;
 diff --git a/src/main/database.cpp b/src/main/database.cpp
+index 04673dd163..fcd410b10e 100644
 --- a/src/main/database.cpp
 +++ b/src/main/database.cpp
-@@ -510,6 +510,10 @@
+@@ -510,6 +510,16 @@ idx_t DuckDB::NumberOfThreads() {
  }
  
  bool DatabaseInstance::ExtensionIsLoaded(const string &name) {
 +	auto extension_name = ExtensionHelper::GetExtensionName(name);
 +	if (extension_name == "httpfs" && preloaded_httpfs) {
++		return true;
++	}
++	if (extension_name == "avro" && preloaded_avro) {
++		return true;
++	}
++	if (extension_name == "iceberg" && preloaded_iceberg) {
 +		return true;
 +	}
  	return extension_manager->ExtensionIsLoaded(name);

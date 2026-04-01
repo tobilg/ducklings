@@ -1,0 +1,16 @@
+diff --git a/src/avro_copy.cpp b/src/avro_copy.cpp
+index 4cf59ea..280d7dd 100644
+--- a/src/avro_copy.cpp
++++ b/src/avro_copy.cpp
+@@ -545,7 +545,10 @@ WriteAvroLocalState::~WriteAvroLocalState() {
+ 
+ WriteAvroGlobalState::~WriteAvroGlobalState() {
+ 	//! NOTE: the 'writer' and 'datum_writer' do not need to be closed, they are owned by the file_writer
+-	avro_file_writer_close(file_writer);
++	//! file_writer may be null if already explicitly closed (e.g. WASM Asyncify workaround)
++	if (file_writer) {
++		avro_file_writer_close(file_writer);
++	}
+ }
+ 
+ WriteAvroGlobalState::WriteAvroGlobalState(ClientContext &context, FunctionData &bind_data_p, FileSystem &fs,

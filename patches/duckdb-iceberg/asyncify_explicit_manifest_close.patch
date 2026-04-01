@@ -1,0 +1,69 @@
+diff --git a/src/core/metadata/manifest/iceberg_manifest.cpp b/src/core/metadata/manifest/iceberg_manifest.cpp
+index 2cbb2282..036c76a7 100644
+--- a/src/core/metadata/manifest/iceberg_manifest.cpp
++++ b/src/core/metadata/manifest/iceberg_manifest.cpp
+@@ -1,6 +1,7 @@
+ #include "core/metadata/manifest/iceberg_manifest.hpp"
+ 
+ #include "duckdb/storage/caching_file_system.hpp"
++#include "avro_copy.hpp"
+ 
+ #include "catalog/rest/iceberg_table_set.hpp"
+ #include "catalog/rest/api/catalog_utils.hpp"
+@@ -826,6 +827,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
+ 	CopyFunctionBindInput input(copy_info);
+ 	input.file_extension = "avro";
+ 
++	idx_t manifest_length = 0;
+ 	{
+ 		ThreadContext thread_context(context);
+ 		ExecutionContext execution_context(context, thread_context, nullptr);
+@@ -837,11 +839,18 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
+ 		copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, chunk);
+ 		copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
+ 		copy.copy_to_finalize(context, *bind_data, *global_state);
++
++		// Explicitly close the avro writer and flush to S3 BEFORE the destructor runs.
++		// In WASM+Asyncify, async S3 operations inside C++ destructors fail because
++		// Asyncify cannot reliably save/restore state across destructor boundaries.
++		auto &avro_state = global_state->Cast<WriteAvroGlobalState>();
++		avro_file_writer_close(avro_state.file_writer);
++		avro_state.file_writer = nullptr;
++		avro_state.handle->Close();
++		manifest_length = avro_state.handle->GetFileSize();
++		avro_state.handle.reset();
+ 	}
+ 
+-	auto file_system = CachingFileSystem::Get(context);
+-	auto file_handle = file_system.OpenFile(path, FileOpenFlags::FILE_FLAGS_READ);
+-	auto manifest_length = file_handle->GetFileSize();
+ 	return manifest_length;
+ }
+ 
+diff --git a/src/core/metadata/manifest/iceberg_manifest_list.cpp b/src/core/metadata/manifest/iceberg_manifest_list.cpp
+index c0cc80aa..7fefc2fc 100644
+--- a/src/core/metadata/manifest/iceberg_manifest_list.cpp
++++ b/src/core/metadata/manifest/iceberg_manifest_list.cpp
+@@ -1,5 +1,6 @@
+ #include "core/metadata/manifest/iceberg_manifest_list.hpp"
+ 
++#include "avro_copy.hpp"
+ #include "duckdb/common/exception/conversion_exception.hpp"
+ #include "duckdb/main/database.hpp"
+ #include "duckdb/storage/buffer_manager.hpp"
+@@ -457,6 +458,15 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
+ 	copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, data);
+ 	copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
+ 	copy.copy_to_finalize(context, *bind_data, *global_state);
++
++	// Explicitly close the avro writer and flush to S3 BEFORE the destructor runs.
++	// In WASM+Asyncify, async S3 operations inside C++ destructors fail because
++	// Asyncify cannot reliably save/restore state across destructor boundaries.
++	auto &avro_state = global_state->Cast<WriteAvroGlobalState>();
++	avro_file_writer_close(avro_state.file_writer);
++	avro_state.file_writer = nullptr;
++	avro_state.handle->Close();
++	avro_state.handle.reset();
+ }
+ 
+ } // namespace manifest_list

@@ -21,6 +21,32 @@ extern "C" {
     extern int em_has_xhr();
 }
 
+static uint32_t ReadPacketU32(const char *packet, idx_t offset) {
+    const auto *bytes = reinterpret_cast<const uint8_t *>(packet + offset);
+    uint32_t value = 0;
+    value |= bytes[0];
+    value |= bytes[1] << 8;
+    value |= bytes[2] << 16;
+    value |= bytes[3] << 24;
+    return value;
+}
+
+static void ParseResponseHeaders(const string &headers_str, HTTPHeaders &headers_out) {
+    vector<string> header_lines = StringUtil::Split(headers_str, "\r\n");
+    for (auto &line : header_lines) {
+        size_t colon_pos = line.find(':');
+        if (colon_pos == string::npos) {
+            continue;
+        }
+        string name = line.substr(0, colon_pos);
+        string value = line.substr(colon_pos + 1);
+        while (!value.empty() && value[0] == ' ') {
+            value = value.substr(1);
+        }
+        headers_out.Insert(name, value);
+    }
+}
+
 // ============================================================================
 // Synchronous JavaScript functions using EM_ASM_PTR (for browsers)
 // ============================================================================
@@ -31,6 +57,31 @@ static char* em_sync_head_request(const char* url, int header_count, char** head
         var url = UTF8ToString($0);
         var headerCount = $1;
         var headerArray = $2;
+
+        function buildPacket(status, headerBytes, bodyBytes) {
+            var headerLen = headerBytes.length;
+            var bodyLen = bodyBytes.length;
+            var resultPtr = _malloc(12 + headerLen + bodyLen);
+
+            Module.HEAPU8[resultPtr] = status & 0xFF;
+            Module.HEAPU8[resultPtr + 1] = (status >> 8) & 0xFF;
+            Module.HEAPU8[resultPtr + 2] = (status >> 16) & 0xFF;
+            Module.HEAPU8[resultPtr + 3] = (status >> 24) & 0xFF;
+
+            Module.HEAPU8[resultPtr + 4] = headerLen & 0xFF;
+            Module.HEAPU8[resultPtr + 5] = (headerLen >> 8) & 0xFF;
+            Module.HEAPU8[resultPtr + 6] = (headerLen >> 16) & 0xFF;
+            Module.HEAPU8[resultPtr + 7] = (headerLen >> 24) & 0xFF;
+
+            Module.HEAPU8[resultPtr + 8] = bodyLen & 0xFF;
+            Module.HEAPU8[resultPtr + 9] = (bodyLen >> 8) & 0xFF;
+            Module.HEAPU8[resultPtr + 10] = (bodyLen >> 16) & 0xFF;
+            Module.HEAPU8[resultPtr + 11] = (bodyLen >> 24) & 0xFF;
+
+            Module.HEAPU8.set(headerBytes, resultPtr + 12);
+            Module.HEAPU8.set(bodyBytes, resultPtr + 12 + headerLen);
+            return resultPtr;
+        }
 
         if (typeof XMLHttpRequest === "undefined") {
             return 0;
@@ -58,26 +109,20 @@ static char* em_sync_head_request(const char* url, int header_count, char** head
             xhr.send(null);
         } catch (error) {
             console.error("XHR HEAD error:", error);
-            return 0;
-        }
-
-        if (xhr.status === 0 || xhr.status >= 400) {
-            console.error("HEAD error:", xhr.status, xhr.statusText);
-            return 0;
+            var errorBytes = new TextEncoder().encode(error && error.message ? error.message : "HEAD request failed");
+            return buildPacket(0, new Uint8Array(0), errorBytes);
         }
 
         var responseHeaders = xhr.getAllResponseHeaders();
         var headerBytes = new TextEncoder().encode(responseHeaders);
-        var len = headerBytes.length;
-        var resultPtr = _malloc(len + 4);
+        var errorBytes = new Uint8Array(0);
 
-        Module.HEAPU8[resultPtr] = len & 0xFF;
-        Module.HEAPU8[resultPtr + 1] = (len >> 8) & 0xFF;
-        Module.HEAPU8[resultPtr + 2] = (len >> 16) & 0xFF;
-        Module.HEAPU8[resultPtr + 3] = (len >> 24) & 0xFF;
-        Module.HEAPU8.set(headerBytes, resultPtr + 4);
+        if (xhr.status === 0) {
+            errorBytes = new TextEncoder().encode(xhr.statusText || "HEAD request failed");
+            return buildPacket(0, new Uint8Array(0), errorBytes);
+        }
 
-        return resultPtr;
+        return buildPacket(xhr.status, headerBytes, errorBytes);
     }, url, header_count, header_array);
 }
 
@@ -90,6 +135,31 @@ static char* em_sync_request(const char* url, const char* method, int header_cou
         var headerArray = $3;
         var bodyPtr = $4;
         var bodyLen = $5;
+
+        function buildPacket(status, headerBytes, bodyBytes) {
+            var headerLen = headerBytes.length;
+            var bodyLen = bodyBytes.length;
+            var resultPtr = _malloc(12 + headerLen + bodyLen);
+
+            Module.HEAPU8[resultPtr] = status & 0xFF;
+            Module.HEAPU8[resultPtr + 1] = (status >> 8) & 0xFF;
+            Module.HEAPU8[resultPtr + 2] = (status >> 16) & 0xFF;
+            Module.HEAPU8[resultPtr + 3] = (status >> 24) & 0xFF;
+
+            Module.HEAPU8[resultPtr + 4] = headerLen & 0xFF;
+            Module.HEAPU8[resultPtr + 5] = (headerLen >> 8) & 0xFF;
+            Module.HEAPU8[resultPtr + 6] = (headerLen >> 16) & 0xFF;
+            Module.HEAPU8[resultPtr + 7] = (headerLen >> 24) & 0xFF;
+
+            Module.HEAPU8[resultPtr + 8] = bodyLen & 0xFF;
+            Module.HEAPU8[resultPtr + 9] = (bodyLen >> 8) & 0xFF;
+            Module.HEAPU8[resultPtr + 10] = (bodyLen >> 16) & 0xFF;
+            Module.HEAPU8[resultPtr + 11] = (bodyLen >> 24) & 0xFF;
+
+            Module.HEAPU8.set(headerBytes, resultPtr + 12);
+            Module.HEAPU8.set(bodyBytes, resultPtr + 12 + headerLen);
+            return resultPtr;
+        }
 
         if (typeof XMLHttpRequest === "undefined") {
             return 0;
@@ -126,25 +196,20 @@ static char* em_sync_request(const char* url, const char* method, int header_cou
             }
         } catch (error) {
             console.error("XHR error:", error);
-            return 0;
+            var errorBytes = new TextEncoder().encode(error && error.message ? error.message : "Request failed");
+            return buildPacket(0, new Uint8Array(0), errorBytes);
         }
 
-        if (xhr.status === 0 || xhr.status >= 400) {
-            console.error("Request error:", xhr.status, xhr.statusText);
-            return 0;
+        if (xhr.status === 0) {
+            var requestErrorBytes = new TextEncoder().encode(xhr.statusText || "Request failed");
+            return buildPacket(0, new Uint8Array(0), requestErrorBytes);
         }
 
-        var responseBody = new Uint8Array(xhr.response);
-        var len = responseBody.length;
-        var resultPtr = _malloc(len + 4);
+        var responseHeaders = xhr.getAllResponseHeaders();
+        var headerBytes = new TextEncoder().encode(responseHeaders);
+        var responseBody = xhr.response ? new Uint8Array(xhr.response) : new Uint8Array(0);
 
-        Module.HEAPU8[resultPtr] = len & 0xFF;
-        Module.HEAPU8[resultPtr + 1] = (len >> 8) & 0xFF;
-        Module.HEAPU8[resultPtr + 2] = (len >> 16) & 0xFF;
-        Module.HEAPU8[resultPtr + 3] = (len >> 24) & 0xFF;
-        Module.HEAPU8.set(responseBody, resultPtr + 4);
-
-        return resultPtr;
+        return buildPacket(xhr.status, headerBytes, responseBody);
     }, url, method, header_count, header_array, body, body_len);
 }
 
@@ -158,11 +223,6 @@ public:
         host_port = proto_host_port;
         // Check once at construction if we have XHR available
         use_sync_xhr = (em_has_xhr() == 1);
-        if (use_sync_xhr) {
-            printf("HTTPWasmClient: Using synchronous XMLHttpRequest (browser mode)\n");
-        } else {
-            printf("HTTPWasmClient: Using async fetch with Asyncify (workers mode)\n");
-        }
     }
 
     void Initialize(HTTPParams &params) override {}
@@ -265,22 +325,30 @@ private:
         if (payload) free(payload);
 
         if (!result) {
-            res = make_uniq<HTTPResponse>(HTTPStatusCode::NotFound_404);
-            res->reason = "Request failed - check console for errors";
+            res = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+            res->request_error = "Request failed - no response packet";
         } else {
-            res = make_uniq<HTTPResponse>(HTTPStatusCode::OK_200);
+            auto status_code = ReadPacketU32(result, 0);
+            auto header_len = ReadPacketU32(result, 4);
+            auto body_len = ReadPacketU32(result, 8);
+            auto *header_ptr = result + 12;
+            auto *body_ptr = header_ptr + header_len;
 
-            // Read length from first 4 bytes
-            uint32_t len = 0;
-            len |= ((uint8_t *)result)[0];
-            len |= ((uint8_t *)result)[1] << 8;
-            len |= ((uint8_t *)result)[2] << 16;
-            len |= ((uint8_t *)result)[3] << 24;
+            if (status_code == 0) {
+                res = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+                res->request_error = string(body_ptr, body_len);
+            } else {
+                auto status = HTTPUtil::ToStatusCode(static_cast<int32_t>(status_code));
+                res = make_uniq<HTTPResponse>(status);
+                res->reason = HTTPUtil::GetStatusMessage(status);
+                if (header_len > 0) {
+                    ParseResponseHeaders(string(header_ptr, header_len), res->headers);
+                }
+                res->body = string(body_ptr, body_len);
 
-            res->body = string(result + 4, len);
-
-            if (content_handler) {
-                content_handler((const_data_ptr_t)(result + 4), len);
+                if (content_handler && status_code >= 200 && status_code < 300) {
+                    content_handler((const_data_ptr_t)(body_ptr), body_len);
+                }
             }
 
             free(result);
@@ -309,32 +377,24 @@ private:
         FreeHeaders(header_array, header_count);
 
         if (!result) {
-            res = make_uniq<HTTPResponse>(HTTPStatusCode::NotFound_404);
-            res->reason = "HEAD request failed";
+            res = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+            res->request_error = "HEAD request failed - no response packet";
         } else {
-            res = make_uniq<HTTPResponse>(HTTPStatusCode::OK_200);
+            auto status_code = ReadPacketU32(result, 0);
+            auto header_len = ReadPacketU32(result, 4);
+            auto body_len = ReadPacketU32(result, 8);
+            auto *header_ptr = result + 12;
+            auto *body_ptr = header_ptr + header_len;
 
-            // Read length
-            uint32_t len = 0;
-            len |= ((uint8_t *)result)[0];
-            len |= ((uint8_t *)result)[1] << 8;
-            len |= ((uint8_t *)result)[2] << 16;
-            len |= ((uint8_t *)result)[3] << 24;
-
-            // Parse response headers
-            string headers_str(result + 4, len);
-            vector<string> header_lines = StringUtil::Split(headers_str, "\r\n");
-
-            for (auto &line : header_lines) {
-                size_t colon_pos = line.find(':');
-                if (colon_pos != string::npos) {
-                    string name = line.substr(0, colon_pos);
-                    string value = line.substr(colon_pos + 1);
-                    // Trim leading space from value
-                    while (!value.empty() && value[0] == ' ') {
-                        value = value.substr(1);
-                    }
-                    res->headers.Insert(name, value);
+            if (status_code == 0) {
+                res = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+                res->request_error = string(body_ptr, body_len);
+            } else {
+                auto status = HTTPUtil::ToStatusCode(static_cast<int32_t>(status_code));
+                res = make_uniq<HTTPResponse>(status);
+                res->reason = HTTPUtil::GetStatusMessage(status);
+                if (header_len > 0) {
+                    ParseResponseHeaders(string(header_ptr, header_len), res->headers);
                 }
             }
 

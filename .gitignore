@@ -53,6 +53,7 @@ Cargo.lock
 # Build artifacts
 build/
 dist/
+vcpkg_installed/
 
 # Node.js
 node_modules/
@@ -88,3 +89,4 @@ coverage/
 .claude/
 plans/
 manual-tests/
+scripts/test-local-worker.sh

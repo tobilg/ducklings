@@ -1587,7 +1587,7 @@ export class DuckDB {
         mod._free(errorPtrPtr);
       }
 
-      // Initialize httpfs (only if external access enabled)
+      // Initialize extensions (only if external access enabled)
       if (finalConfig.enableExternalAccess !== false) {
         mod.ccall('duckdb_wasm_httpfs_init', null, ['number'], [this.dbPtr]);
       }
@@ -1712,13 +1712,20 @@ export class Connection {
 
     const resultPtr = module._malloc(64);
     try {
-      const status = (await module.ccall(
-        'duckdb_query',
-        'number',
-        ['number', 'string', 'number'],
-        [this.connPtr, sql, resultPtr],
-        { async: true },
-      )) as number;
+      let status: number;
+      try {
+        status = (await module.ccall(
+          'duckdb_query',
+          'number',
+          ['number', 'string', 'number'],
+          [this.connPtr, sql, resultPtr],
+          { async: true },
+        )) as number;
+      } catch (wasmError: unknown) {
+        const err = wasmError as Error;
+        console.error('WASM trap:', err.message, '\nStack:', err.stack);
+        throw wasmError;
+      }
 
       if (status !== 0) {
         const errorPtr = module.ccall(
@@ -2056,13 +2063,20 @@ export class Connection {
 
     const resultPtr = module._malloc(64);
     try {
-      const status = (await module.ccall(
-        'duckdb_query',
-        'number',
-        ['number', 'string', 'number'],
-        [this.connPtr, sql, resultPtr],
-        { async: true },
-      )) as number;
+      let status: number;
+      try {
+        status = (await module.ccall(
+          'duckdb_query',
+          'number',
+          ['number', 'string', 'number'],
+          [this.connPtr, sql, resultPtr],
+          { async: true },
+        )) as number;
+      } catch (wasmError: unknown) {
+        const err = wasmError as Error;
+        console.error('WASM trap:', err.message, '\nStack:', err.stack);
+        throw wasmError;
+      }
 
       if (status !== 0) {
         const errorPtr = module.ccall(
@@ -2225,13 +2239,20 @@ export class Connection {
 
     const resultPtr = module._malloc(64);
     try {
-      const status = (await module.ccall(
-        'duckdb_query',
-        'number',
-        ['number', 'string', 'number'],
-        [this.connPtr, sql, resultPtr],
-        { async: true },
-      )) as number;
+      let status: number;
+      try {
+        status = (await module.ccall(
+          'duckdb_query',
+          'number',
+          ['number', 'string', 'number'],
+          [this.connPtr, sql, resultPtr],
+          { async: true },
+        )) as number;
+      } catch (wasmError: unknown) {
+        const err = wasmError as Error;
+        console.error('WASM trap:', err.message, '\nStack:', err.stack);
+        throw wasmError;
+      }
 
       if (status !== 0) {
         const errorPtr = module.ccall(

@@ -32,13 +32,19 @@ await db.close();
 ## Features
 
 - Async API - queries run in Web Worker, UI stays responsive
-- ~5.7MB gzipped WASM
+- ~6.4 MiB gzipped WASM
 - Built-in Parquet, JSON, and httpfs extensions
 - Arrow Table support via Flechette (query + insert)
 - Prepared statements with type-safe parameter binding
 - Streaming results for large datasets
 - Transaction support
 - File registration (URL, buffer, text)
+
+## Extension Availability
+
+The browser build includes DuckDB's `json` extension. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` are available in `@ducklings/browser`.
+
+This differs from the default `@ducklings/workers` build, which omits the `json` extension to stay within Cloudflare's deployment size budget.
 
 ## API
 

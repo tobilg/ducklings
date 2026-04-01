@@ -27,16 +27,24 @@ The project publishes two npm packages:
 ducklings/
 ├── Makefile                       # Build orchestration
 ├── deps/                          # Git submodules
-│   ├── duckdb/                    # DuckDB v1.4.3 (C++ source)
-│   └── duckdb-httpfs/             # httpfs extension source
+│   ├── duckdb/                    # DuckDB v1.5.0 (C++ source)
+│   ├── duckdb-httpfs/             # httpfs extension source
+│   ├── duckdb-iceberg/            # Iceberg extension source
+│   └── duckdb-avro/               # Avro extension source (iceberg dependency)
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM binary
 │   ├── duckdb-workers.js          # Workers JS glue (Asyncify)
 │   └── duckdb-workers.wasm        # Workers WASM binary
+├── vcpkg.json                     # vcpkg manifest (iceberg/avro C deps)
+├── vcpkg_ports/                   # vcpkg overlay ports for WASM compat
+│   ├── aws-c-io/                  # No-op I/O for WASM
+│   ├── liblzma/                   # LITTLE_ENDIAN fix for wasm32
+│   ├── snappy/                    # fPIC fix for wasm32
+│   └── zlib/                      # Build fixes
 ├── patches/                       # Source patches for dependencies
 │   └── duckdb/                    # DuckDB-specific patches
-│       └── preloaded_httpfs.patch # httpfs preload recognition
+│       └── preloaded_extensions.patch # Makes DuckDB recognize httpfs/avro/iceberg as preloaded
 ├── packages/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
 │   ├── ducklings-workers/         # @ducklings/workers (npm)
@@ -55,8 +63,9 @@ ducklings/
 
 - Node.js 18+
 - pnpm 9+
-- Emscripten SDK 3.1.50
+- Emscripten SDK 4.0.22
 - Binaryen (for wasm-opt)
+- git (for vcpkg clone during build)
 
 ### Make Targets
 
@@ -107,8 +116,9 @@ Both packages export:
 
 - `scripts/build-duckdb.sh` - Main build script
 - Uses Emscripten with -Oz optimization, LTO, wasm-opt
-- Extensions built-in: Parquet, httpfs, JSON
+- Extensions built-in: Parquet, httpfs, JSON, Avro, Iceberg
 - Workers build adds `-sASYNCIFY` for async fetch support
+- vcpkg provides C/C++ dependencies (AWS SDK, roaring, avro-c, curl, openssl, etc.)
 
 ### Patch System
 
@@ -118,7 +128,8 @@ DuckDB source requires patches for WASM compatibility. Patches are stored in `pa
 
 | Patch | Purpose |
 |-------|---------|
-| `preloaded_httpfs.patch` | Makes DuckDB recognize httpfs as preloaded |
+| `preloaded_extensions.patch` | Makes DuckDB recognize httpfs, avro, and iceberg as preloaded |
+| `http_util_extension_guard.patch` | Guards HTTP client code behind DUCKDB_DISABLE_EXTENSION_LOAD |
 
 **How it works:**
 1. Build script calls `apply_patches()` before CMake configuration
@@ -166,8 +177,18 @@ Required secret: `NPM_TOKEN`
 
 ### Git Submodules (deps/)
 
-- `duckdb` - DuckDB v1.4.3 source code
+- `duckdb` - DuckDB v1.5.0 source code
 - `duckdb-httpfs` - httpfs extension source
+- `duckdb-iceberg` - Iceberg extension source (v1.5-variegata)
+- `duckdb-avro` - Avro extension source (dependency of iceberg)
+
+### vcpkg Dependencies
+
+Managed via `vcpkg.json` manifest. Cross-compiled for `wasm32-emscripten` during build.
+
+Key libraries: AWS SDK (SigV4 signing, S3), roaring (bitmap indexes), avro-c, curl, openssl, jansson, snappy, lzma, zlib.
+
+Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 ### npm Dependencies
 
@@ -197,16 +218,19 @@ Required secret: `NPM_TOKEN`
 
 ### No Dynamic Extension Loading
 
-Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions (Parquet, JSON, httpfs) are available.
+Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions (Parquet, JSON, httpfs, Avro, Iceberg) are available.
 
 **Why?** Dynamic extension loading in WASM requires Emscripten's `-sMAIN_MODULE` flag, which significantly increases binary size (~2-3x). This conflicts with the project's goal of minimal footprint.
 
 **What works:**
 - `SELECT * FROM 'https://example.com/data.parquet'` (httpfs + Parquet)
 - `SELECT * FROM read_json('file.json')` (JSON)
+- `SELECT * FROM iceberg_scan('https://example.com/iceberg-table')` (Iceberg)
+- `SELECT * FROM iceberg_snapshots('https://example.com/iceberg-table')` (Iceberg metadata)
+- `SELECT * FROM read_avro('https://example.com/data.avro')` (Avro)
 - All built-in DuckDB functions
 
 **What doesn't work:**
-- `INSTALL iceberg` → Error: "Installing external extensions is disabled through a compile time flag"
-- `LOAD iceberg` → Error: "Loading external extensions is disabled through a compile time flag"
+- `INSTALL <ext>` → Error: "Installing external extensions is disabled through a compile time flag"
+- `LOAD <ext>` → Error: "Loading external extensions is disabled through a compile time flag"
 - Any extension not compiled into the WASM binary

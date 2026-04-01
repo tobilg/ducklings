@@ -1,0 +1,15 @@
+{
+  "name": "snappy",
+  "version": "1.2.1",
+  "description": "A fast compressor/decompressor.",
+  "homepage": "https://github.com/google/snappy",
+  "license": null,
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake"
+    },
+    {
+      "name": "vcpkg-cmake-config"
+    }
+  ]
+}

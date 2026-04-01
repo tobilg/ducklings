@@ -11,3 +11,9 @@
 [submodule "deps/nanoarrow"]
 	path = deps/nanoarrow
 	url = https://github.com/apache/arrow-nanoarrow.git
+[submodule "deps/duckdb-iceberg"]
+	path = deps/duckdb-iceberg
+	url = https://github.com/duckdb/duckdb-iceberg.git
+[submodule "deps/duckdb-avro"]
+	path = deps/duckdb-avro
+	url = https://github.com/duckdb/duckdb_avro.git
