@@ -69,10 +69,10 @@ const data = await conn.query(`SELECT * FROM read_csv('${file.name}')`);
 Register text content directly:
 
 ```typescript
-await db.registerFileText('config.json', JSON.stringify({ key: 'value' }));
+await db.registerFileText('config.csv', 'key,value\nmode,debug\n');
 
 const rows = await conn.query(`
-  SELECT * FROM read_json('config.json')
+  SELECT * FROM read_csv('config.csv', header = true)
 `);
 ```
 
@@ -120,9 +120,9 @@ DuckDB can read many formats from registered files:
 | Format | Read Function | Example |
 |--------|--------------|---------|
 | CSV | `read_csv()` | `SELECT * FROM read_csv('data.csv')` |
-| JSON | `read_json()` | `SELECT * FROM read_json('data.json')` |
 | Parquet | Direct path | `SELECT * FROM 'data.parquet'` |
-| NDJSON | `read_ndjson_auto()` | `SELECT * FROM read_ndjson_auto('data.ndjson')` |
+
+JSON and NDJSON readers require a custom build with DuckDB's `json` extension enabled. The standard `@ducklings/browser` and `@ducklings/workers` packages omit that extension to stay within Cloudflare deployment size limits.
 
 ## Complete Example
 

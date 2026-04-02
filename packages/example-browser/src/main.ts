@@ -27,7 +27,6 @@ const status = document.getElementById('status') as HTMLDivElement;
 const runBtn = document.getElementById('run') as HTMLButtonElement;
 const runArrowBtn = document.getElementById('runArrow') as HTMLButtonElement;
 const remoteBtn = document.getElementById('remote') as HTMLButtonElement;
-const jsonBtn = document.getElementById('json') as HTMLButtonElement;
 const sqlInput = document.getElementById('sql') as HTMLTextAreaElement;
 
 function setStatus(type: 'loading' | 'ready' | 'error', text: string): void {
@@ -68,9 +67,8 @@ async function initialize(): Promise<void> {
     runBtn.disabled = false;
     runArrowBtn.disabled = false;
     remoteBtn.disabled = false;
-    jsonBtn.disabled = false;
     log(
-      'Ducklings ready! (Async Worker API)\n\nEnter a SQL query and click "Run Query" to execute.\nUse "Run as Arrow" to get results as an Arrow Table.\n\nFeatures:\n- httpfs: Load remote Parquet/CSV/JSON files\n- JSON: Native JSON functions (json_extract, json_keys, etc.)'
+      'Ducklings ready! (Async Worker API)\n\nEnter a SQL query and click "Run Query" to execute.\nUse "Run as Arrow" to get results as an Arrow Table.\n\nFeatures:\n- httpfs: Load remote Parquet/CSV files\n- Arrow: Query results as Arrow Tables'
     );
   } catch (err) {
     setStatus('error', 'Error');
@@ -193,44 +191,6 @@ document.getElementById('remote')!.addEventListener('click', async () => {
     );
   } finally {
     remoteBtn.disabled = false;
-  }
-});
-
-document.getElementById('json')!.addEventListener('click', async () => {
-  const jsonQuery = `SELECT
-    -- Parse JSON
-    json('{"name": "Alice", "age": 30}') AS parsed,
-
-    -- Extract as string (no quotes)
-    json_extract_string('{"user": {"name": "Bob"}}', '$.user.name') AS user_name,
-
-    -- Using ->> operator
-    '{"status": "active"}'::JSON->>'$.status' AS status,
-
-    -- Get keys
-    json_keys('{"a": 1, "b": 2}') AS keys,
-
-    -- Convert to JSON
-    to_json({items: [1, 2, 3]}) AS struct_json`;
-  sqlInput.value = jsonQuery;
-
-  jsonBtn.disabled = true;
-  setStatus('loading', 'Running...');
-  log('Demonstrating JSON functions...');
-
-  try {
-    const start = performance.now();
-    const result = await conn!.query(jsonQuery);
-    const elapsed = performance.now() - start;
-
-    logWithTiming(JSON.stringify(result, null, 2), elapsed);
-    setStatus('ready', 'Ready');
-  } catch (err) {
-    setStatus('error', 'Error');
-    const error = err as Error;
-    log(`Error running JSON query:\n${error.message}`);
-  } finally {
-    jsonBtn.disabled = false;
   }
 });
 

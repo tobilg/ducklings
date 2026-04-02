@@ -21,7 +21,7 @@ You can try the browser package in an example  at [https://ducklings.serverless-
 
 ## Features
 
-- **Minimal footprint**: ~6.4 MiB (browser) / ~9.7 MiB (workers) gzipped WASM (optimized with -Oz, LTO, wasm-opt)
+- **Minimal footprint**: ~6.3 MiB (browser) / ~9.7 MiB (workers) gzipped WASM (optimized with -Oz, LTO, wasm-opt)
 - **TypeScript API**: Full TypeScript support with type definitions
 - **Prepared statements**: Secure parameterized queries with full type support
 - **Streaming results**: Memory-efficient chunked data processing
@@ -29,7 +29,7 @@ You can try the browser package in an example  at [https://ducklings.serverless-
 - **Arrow support**: Query results as Arrow Tables, insert data via Arrow IPC streams, powered by [Flechette](https://github.com/uwdata/flechette)
 - **Parquet support**: Read Parquet files with built-in extension
 - **httpfs support**: Load remote files via HTTP/HTTPS
-- **JSON support**: Available in the browser build; omitted from the default workers build to stay within Cloudflare's deployment size budget
+- **JSON support**: Omitted from the default browser and workers builds to stay within Cloudflare deployment size limits; use a custom build if you need DuckDB's `json` extension
 - **Cloudflare Workers**: First-class support with dedicated async package
 - **Browser support**: Works in modern browsers with ES modules
 
@@ -39,9 +39,9 @@ You can try the browser package in an example  at [https://ducklings.serverless-
 |---------------------|----------------------|----------------------|
 | `parquet` | :white_check_mark: | :white_check_mark: |
 | `httpfs` | :white_check_mark: | :white_check_mark: |
-| `json` | :white_check_mark: | Default build: :x: |
+| `json` | Default build: :x: | Default build: :x: |
 
-The default workers build excludes the `json` extension so the bundled Worker stays small enough to deploy. That means JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` are available in `@ducklings/browser`, but not in the default `@ducklings/workers` build.
+The default browser and workers builds both exclude the `json` extension so the bundled artifacts stay within Cloudflare Pages and Workers size limits. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
 
 ## Current Status
 
@@ -56,7 +56,7 @@ The default workers build excludes the `json` extension so the bundled Worker st
 | Arrow IPC insert | :white_check_mark: |
 | Parquet extension | :white_check_mark: |
 | httpfs extension | :white_check_mark: |
-| JSON extension | Browser only |
+| JSON extension | Custom build only |
 | Cloudflare Workers | :white_check_mark: |
 | Browser support | :white_check_mark: |
 
@@ -126,7 +126,7 @@ export default {
 
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
-| `@ducklings/browser` | Async (Web Worker) | ~6.4 MiB | Works in browsers |
+| `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | Works in browsers |
 | `@ducklings/workers` | Async (Asyncify) | ~9.7 MiB | Works in CF Workers |
 
 #### Arrow IPC Endpoint
@@ -493,7 +493,7 @@ const csvData = await conn.query(`
 `);
 ```
 
-`read_json('https://...')` is available in `@ducklings/browser`. It is not available in the default `@ducklings/workers` build because that package omits the `json` extension.
+`read_json('https://...')` is not available in the default `@ducklings/browser` or `@ducklings/workers` packages. It requires a custom build with DuckDB's `json` extension enabled.
 
 ### S3 and R2 Secrets
 
@@ -551,55 +551,21 @@ See the [Cloudflare Workers example](./packages/example-cloudflare-worker/) for 
 
 ### JSON Functions
 
-The browser build includes DuckDB's JSON extension, which provides native JSON parsing and manipulation:
+The default `@ducklings/browser` and `@ducklings/workers` packages omit DuckDB's `json` extension to keep the bundled artifacts small enough for Cloudflare Pages and Workers deployment.
 
-```typescript
-// Parse JSON strings
-const parsed = await conn.query(`SELECT json('{"name": "Alice", "age": 30}')`);
-
-// Extract values (returns JSON type with quotes)
-const jsonValue = await conn.query(`
-  SELECT json_extract('{"user": {"name": "Bob"}}', '$.user.name') AS name
-`);
-// Returns: [{name: "\"Bob\""}]
-
-// Extract as string (returns raw value without quotes)
-const stringValue = await conn.query(`
-  SELECT json_extract_string('{"user": {"name": "Bob"}}', '$.user.name') AS name
-`);
-// Returns: [{name: "Bob"}]
-
-// Using ->> operator (shorthand for json_extract_string)
-const result = await conn.query(`
-  SELECT '{"id": 1, "name": "Test"}'::JSON->>'$.name' AS name
-`);
-// Returns: [{name: "Test"}]
-
-// Get JSON keys
-const keys = await conn.query(`SELECT json_keys('{"a": 1, "b": 2, "c": 3}')`);
-
-// Read JSON files (local or remote with httpfs)
-const data = await conn.query(`SELECT * FROM read_json('data.json')`);
-
-// Convert to JSON
-const jsonOut = await conn.query(`
-  SELECT to_json({name: 'test', values: [1, 2, 3]})
-`);
-```
-
-These JSON functions are available in `@ducklings/browser`, but not in the default `@ducklings/workers` build.
+If you need JSON functions such as `json_extract(...)`, the `::JSON` type alias, or file readers like `read_json()` / `read_ndjson_auto()`, build a custom WASM artifact with the `json` extension enabled.
 
 #### DataChunk JSON Helper
 
-For streaming results, use the `getJSON()` method to parse JSON columns:
+For streaming results, use the `getJSON()` method to parse JSON-formatted string columns:
 
 ```typescript
 const stream = await conn.queryStreaming(`
-  SELECT json('{"key": "value"}') AS data
+  SELECT '{"key": "value"}' AS data
 `);
 
 for await (const chunk of stream) {
-  // Automatically parses JSON string to object
+  // Parses the JSON string value to an object
   const obj = chunk.getJSON<{key: string}>(0, 0);
   console.log(obj.key); // "value"
 }
@@ -616,7 +582,7 @@ The WASM binary is optimized for size using:
 - **wasm-opt**: Binaryen post-processing with `-Oz --converge`
 - **Reduced exports**: Only 59 essential C functions exported
 
-Result: **~6.4 MiB gzipped** for browser and **~9.7 MiB gzipped** for the default workers build. The workers build excludes the JSON extension to stay within Cloudflare's deployment size budget.
+Result: **~6.3 MiB gzipped** for browser and **~9.7 MiB gzipped** for the default workers build. Both default builds omit the JSON extension to stay within Cloudflare Pages and Workers deployment size limits.
 
 ## Development
 
@@ -787,7 +753,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 │   dist/               │               │               │   dist/               │
 │   ├── duckdb.js       │               │               │   ├── duckdb-workers  │
 │   └── duckdb.wasm     │               │               │   │   .js             │
-│      (~6.4MiB gz)     │               │               │   └── duckdb-workers  │
+│      (~6.3MiB gz)     │               │               │   └── duckdb-workers  │
 └───────────┬───────────┘               │               │       .wasm (~9.7MB)  │
             │                           │               └───────────┬───────────┘
             │                           │                           │
@@ -815,7 +781,7 @@ ducklings/
 │   └── duckdb/                    # DuckDB v1.5.0
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
-│   ├── duckdb.wasm                # Browser WASM (~6.4 MiB gzipped)
+│   ├── duckdb.wasm                # Browser WASM (~6.3 MiB gzipped)
 │   ├── duckdb-workers.js          # Workers JS glue (with Asyncify)
 │   └── duckdb-workers.wasm        # Workers WASM (~9.7 MiB gzipped)
 ├── packages/
@@ -856,7 +822,7 @@ ducklings/
 │  Type marshalling, memory management, HEAP access               │
 ├─────────────────────────────────┬───────────────────────────────┤
 │  @ducklings/browser             │   @ducklings/workers          │
-│  Browser WASM (~6.4MiB gz)      │   Workers WASM (~9.7MiB gz)   │
+│  Browser WASM (~6.3MiB gz)      │   Workers WASM (~9.7MiB gz)   │
 │  - Web Worker + XMLHttpRequest  │   - Asyncify + fetch()        │
 │  - Async API (Promises)         │   - Async API (Promises)      │
 └─────────────────────────────────┴───────────────────────────────┘
@@ -864,11 +830,11 @@ ducklings/
 
 ## Known Limitations
 
-1. **WASM Size**: Browser ~6.4 MiB, Workers ~9.7 MiB gzipped. Exceeds CF Workers free tier (3MB) but works with paid tier
+1. **WASM Size**: Browser ~6.3 MiB, Workers ~9.7 MiB gzipped. Exceeds CF Workers free tier (3MB) but works with paid tier
 2. **No file system**: In-memory databases only (use httpfs for remote files)
 3. **No threads**: Single-threaded execution
 4. **WASM_BIGINT=0**: 64-bit integers passed as two 32-bit values (handled internally)
-5. **No dynamic extension loading**: Only statically compiled extensions are available. Browser ships with Parquet, JSON, and httpfs; the default workers build ships with Parquet and httpfs. `INSTALL`/`LOAD` commands for other extensions will not work. Dynamic loading requires Emscripten's `-sMAIN_MODULE` flag which significantly increases binary size (~2-3x)
+5. **No dynamic extension loading**: Only statically compiled extensions are available. The default browser and workers builds ship with Parquet, httpfs, Avro, and Iceberg, but not JSON. `INSTALL`/`LOAD` commands for other extensions will not work. Dynamic loading requires Emscripten's `-sMAIN_MODULE` flag which significantly increases binary size (~2-3x)
 
 ## License
 

@@ -131,7 +131,7 @@ describe('Filesystem Operations', () => {
   });
 
   describe('insertJSONFromPath()', () => {
-    it('should insert JSON data from a registered file into a table', async () => {
+    it('should fail when the JSON extension is not linked', async () => {
       const json = JSON.stringify([
         { id: 100, label: 'foo' },
         { id: 200, label: 'bar' },
@@ -139,16 +139,10 @@ describe('Filesystem Operations', () => {
       const buf = new TextEncoder().encode(json);
       await db.registerFileBuffer('insert_data.json', buf);
 
-      await conn.insertJSONFromPath('json_insert_test', '/insert_data.json');
+      await expect(
+        conn.insertJSONFromPath('json_insert_test', '/insert_data.json'),
+      ).rejects.toThrow(/json/i);
 
-      const rows = await conn.query<{ id: number; label: string }>(
-        'SELECT * FROM json_insert_test ORDER BY id',
-      );
-      expect(rows).toHaveLength(2);
-      expect(rows[0]).toEqual({ id: 100, label: 'foo' });
-      expect(rows[1]).toEqual({ id: 200, label: 'bar' });
-
-      await conn.execute('DROP TABLE json_insert_test');
       await db.dropFile('insert_data.json');
     });
   });

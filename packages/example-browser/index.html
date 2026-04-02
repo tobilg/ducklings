@@ -221,7 +221,6 @@
             <button id="run" class="btn-primary" disabled>Run Query</button>
             <button id="runArrow" class="btn-primary" disabled>Run as Arrow</button>
             <button id="remote" class="btn-secondary" disabled>Load Remote Parquet</button>
-            <button id="json" class="btn-secondary" disabled>JSON Functions</button>
             <button id="clear" class="btn-secondary">Clear Output</button>
         </div>
 
@@ -234,11 +233,6 @@
                 <li><code onclick="setQuery(this.textContent)">SELECT 'Hello' || ' ' || 'World' AS greeting</code></li>
                 <li><code onclick="setQuery(this.textContent)">SELECT current_timestamp AS now, version() AS version</code></li>
                 <li><code onclick="setQuery(this.textContent)">CREATE TABLE test (id INT, name VARCHAR); INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob'); SELECT * FROM test;</code></li>
-                <li><strong>JSON:</strong></li>
-                <li><code onclick="setQuery(this.textContent)">SELECT json('{"name": "Alice", "age": 30}')</code></li>
-                <li><code onclick="setQuery(this.textContent)">SELECT json_extract_string('{"user": "Bob"}', '$.user') AS user</code></li>
-                <li><code onclick="setQuery(this.textContent)">SELECT '{"id": 1, "active": true}'::JSON->>'$.active' AS active</code></li>
-                <li><code onclick="setQuery(this.textContent)">SELECT json_keys('{"a": 1, "b": 2, "c": 3}') AS keys</code></li>
                 <li><strong>Remote (httpfs):</strong></li>
                 <li><code onclick="setQuery(this.textContent)">SELECT * FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/orders.parquet' LIMIT 5</code></li>
             </ul>

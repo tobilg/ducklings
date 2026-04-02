@@ -388,6 +388,10 @@ export class Connection {
   /**
    * Insert data from a JSON file.
    *
+   * Requires a custom Ducklings build with DuckDB's `json` extension enabled.
+   * The default published browser and workers packages omit that extension to
+   * stay within Cloudflare deployment size limits.
+   *
    * @param tableName - The name of the table to insert into
    * @param path - The virtual file path of the JSON
    * @param options - Optional JSON parsing options

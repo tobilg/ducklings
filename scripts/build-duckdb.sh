@@ -61,13 +61,13 @@ if [ "$TARGET" = "workers" ]; then
     case "${WORKERS_PROFILE}" in
         build|release)
             WORKERS_WASM_DEBUG_DEFAULT=0
-            WORKERS_JSON_ENABLED=0
+            JSON_EXTENSION_ENABLED=0
             WORKERS_RUN_WASM_OPT=1
             OUTPUT_SUFFIX="-workers"
             ;;
         local-debug)
             WORKERS_WASM_DEBUG_DEFAULT=1
-            WORKERS_JSON_ENABLED=1
+            JSON_EXTENSION_ENABLED=1
             WORKERS_RUN_WASM_OPT=0
             OUTPUT_SUFFIX="-workers"
             ;;
@@ -322,7 +322,7 @@ if [ "$TARGET" = "workers" ]; then
 else
     ASYNCIFY_FLAGS=""
     WORKERS_MEMORY_FLAGS=""
-    WORKERS_JSON_ENABLED=1
+    JSON_EXTENSION_ENABLED=0
     WORKERS_RUN_WASM_OPT=0
 
     # Browser doesn't use Asyncify
@@ -592,7 +592,7 @@ build_duckdb() {
         "core_functions_extension"
     )
 
-    if [ "$TARGET" != "workers" ] || [ "${WORKERS_JSON_ENABLED}" = "1" ]; then
+    if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
         EXTENSION_TARGETS=("json_extension" "${EXTENSION_TARGETS[@]}")
     fi
 
@@ -936,12 +936,12 @@ prepare_generated_extension_loader() {
         exit 1
     fi
 
-    if [ "$TARGET" != "workers" ] || [ "${WORKERS_JSON_ENABLED}" = "1" ]; then
+    if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
         echo "${generated_loader}"
         return
     fi
 
-    local filtered_loader="${BUILD_DIR}/codegen/src/generated_extension_loader.workers_no_json.cpp"
+    local filtered_loader="${BUILD_DIR}/codegen/src/generated_extension_loader.no_json.cpp"
     log_info "Preparing generated extension loader without json..." >&2
 
     perl -0pe '
@@ -1003,7 +1003,7 @@ find_duckdb_libraries() {
     fi
 
     # Add json extension only when the generated static extension loader still references it.
-    if [ "${WORKERS_JSON_ENABLED}" = "1" ] && [ -f "${BUILD_DIR}/extension/json/libjson_extension.a" ]; then
+    if [ "${JSON_EXTENSION_ENABLED}" = "1" ] && [ -f "${BUILD_DIR}/extension/json/libjson_extension.a" ]; then
         LIBS="${LIBS} ${BUILD_DIR}/extension/json/libjson_extension.a"
     fi
 
@@ -1248,7 +1248,7 @@ MAINEOF
         [ "$TARGET" = "workers" ] && log_info "  Asyncify strategy: ${ASYNCIFY_STRATEGY}"
     fi
     [ "$TARGET" = "workers" ] && log_info "  Workers profile: ${WORKERS_PROFILE}"
-    [ "$TARGET" = "workers" ] && [ "${WORKERS_JSON_ENABLED}" = "0" ] && log_info "  JSON extension: disabled for deploy-size workers build"
+    [ "${JSON_EXTENSION_ENABLED}" = "0" ] && log_info "  JSON extension: disabled for the default bundled build"
     [ "$TARGET" = "workers" ] && [ "${WORKERS_RUN_WASM_OPT}" = "1" ] && log_info "  wasm-opt: enabled for deploy-size workers build"
 
     # Include JS library for HTTP functions (needed for both builds)

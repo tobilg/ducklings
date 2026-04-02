@@ -4,7 +4,7 @@ Minimal DuckDB WASM for Cloudflare Workers. Async API with full TypeScript suppo
 
 > **Important:** This package requires a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) due to the WASM size (~9.7MB). The free plan has a 3MB limit, while paid plans support up to 10MB.
 >
-> **Extension note:** The default workers build excludes DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard `@ducklings/workers` package.
+> **Extension note:** The default workers build excludes DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard `@ducklings/workers` package. The standard `@ducklings/browser` package now omits `json` as well for the same reason.
 
 ## Installation
 
@@ -116,11 +116,11 @@ The plugin:
 
 Cloudflare Workers doesn't support synchronous XMLHttpRequest (a browser-only API). This package uses Emscripten's Asyncify to enable async `fetch()` calls, making httpfs work properly for loading remote Parquet and CSV files, plus the Iceberg/httpfs write paths used by this repo.
 
-To keep the bundled Worker deployable, the default production build omits the `json` extension. Remote Parquet and CSV access work in the standard package. Remote JSON queries via `read_json()` do not.
+The standard browser and workers packages both omit the `json` extension. Remote Parquet and CSV access work in the standard package. Remote JSON queries via `read_json()` do not.
 
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
-| `@ducklings/browser` | Async (Web Worker) | ~6.4 MiB | XMLHttpRequest |
+| `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | XMLHttpRequest |
 | `@ducklings/workers` | Async (Asyncify) | ~9.7 MiB | fetch() via Asyncify |
 
 ## API
@@ -183,7 +183,7 @@ const csv = await conn.query(`
 
 ```
 
-`read_json()`, JSON functions such as `json_extract(...)`, and the `::JSON` type alias are not available in the default workers build.
+`read_json()`, JSON functions such as `json_extract(...)`, and the `::JSON` type alias are not available in the default workers build. The default browser build omits the same extension.
 
 ### R2 Secrets
 
@@ -290,11 +290,11 @@ await conn.insertArrowFromIPCStream('my_table', ipc);
 
 ## Browser Usage
 
-For browser environments, use [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) instead, which has a smaller WASM size (~6.4 MiB) and runs queries in a Web Worker.
+For browser environments, use [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) instead, which has a smaller WASM size (~6.3 MiB) and runs queries in a Web Worker.
 
 ## Limitations
 
-- **No dynamic extension loading**: Only statically compiled extensions are available. The default workers build includes Parquet and httpfs, but not JSON. `INSTALL`/`LOAD` commands for other extensions will not work.
+- **No dynamic extension loading**: Only statically compiled extensions are available. The default workers build includes Parquet, httpfs, Avro, and Iceberg, but not JSON. `INSTALL`/`LOAD` commands for other extensions will not work.
 
 ## License
 

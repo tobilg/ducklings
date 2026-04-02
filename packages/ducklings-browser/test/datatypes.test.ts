@@ -210,9 +210,14 @@ describe('Data Types', () => {
       await conn.execute('DROP TYPE mood');
     });
 
-    it('should handle JSON type alias', async () => {
-      const result = await conn.query("SELECT '{\"key\": \"value\"}'::JSON AS val");
-      expect(result[0].val).toBeDefined();
+    it('should handle JSON type alias when the JSON extension is linked', async () => {
+      try {
+        const result = await conn.query("SELECT '{\"key\": \"value\"}'::JSON AS val");
+        expect(result[0].val).toBeDefined();
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/json/i);
+      }
     });
   });
 

@@ -32,8 +32,8 @@ await db.close();
 ## Features
 
 - Async API - queries run in Web Worker, UI stays responsive
-- ~6.4 MiB gzipped WASM
-- Built-in Parquet, JSON, and httpfs extensions
+- ~6.3 MiB gzipped WASM
+- Built-in Parquet and httpfs extensions
 - Arrow Table support via Flechette (query + insert)
 - Prepared statements with type-safe parameter binding
 - Streaming results for large datasets
@@ -42,9 +42,9 @@ await db.close();
 
 ## Extension Availability
 
-The browser build includes DuckDB's `json` extension. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` are available in `@ducklings/browser`.
+The default browser build excludes DuckDB's `json` extension so the bundled WASM stays under Cloudflare Pages' 25 MiB per-file limit.
 
-This differs from the default `@ducklings/workers` build, which omits the `json` extension to stay within Cloudflare's deployment size budget.
+JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` are therefore not available in the standard `@ducklings/browser` package. Use a custom build if you need DuckDB's `json` extension.
 
 ## API
 
@@ -222,7 +222,7 @@ For Cloudflare Workers, use the [`@ducklings/workers`](https://www.npmjs.com/pac
 
 ## Limitations
 
-- **No dynamic extension loading**: Only statically compiled extensions (Parquet, JSON, httpfs) are available. `INSTALL`/`LOAD` commands for other extensions will not work.
+- **No dynamic extension loading**: Only statically compiled extensions (Parquet, httpfs, Avro, Iceberg) are available in the default build. `INSTALL`/`LOAD` commands for other extensions will not work.
 
 ## License
 
