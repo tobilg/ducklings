@@ -1,0 +1,25 @@
+{
+  "name": "@ducklings/example-cloudflare-worker-iceberg",
+  "version": "1.5.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-deps": "test -f ../ducklings-workers/dist/index.js || (echo 'Error: @ducklings/workers has not been built yet.' && echo 'Run the following from the repo root first:' && echo '' && echo '  make duckdb-workers      # compile WASM with Asyncify (~3 min)' && echo '  make typescript-workers   # build TypeScript package' && exit 1)",
+    "predev": "pnpm run check-deps",
+    "prebuild": "pnpm run check-deps",
+    "build": "vite build",
+    "dev": "pnpm run build && wrangler dev",
+    "deploy": "pnpm run build && wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ducklings/workers": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.26.1",
+    "@cloudflare/workers-types": "^4.20260310.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "wrangler": "^4.71.0"
+  }
+}

@@ -13,11 +13,11 @@ A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 
 ## Documentation 
 
-The API documentation can be found at [https://ducklings-api.serverless-duckdb.com](https://ducklings-api.serverless-duckdb.com)
+The API documentation can be found at [https://ducklings-api.gh.tobilg.com](https://ducklings-api.gh.tobilg.com)
 
 ## Try it out
 
-You can try the browser package in an example  at [https://ducklings.serverless-duckdb.com](https://ducklings.serverless-duckdb.com)
+You can try the browser package in an example  at [https://ducklings-browser.gh.tobilg.com/](https://ducklings-browser.gh.tobilg.com/)
 
 ## Features
 

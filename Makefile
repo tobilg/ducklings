@@ -32,6 +32,7 @@ SYNC_VERSION_FILES := \
 	packages/ducklings-workers/package.json \
 	packages/example-browser/package.json \
 	packages/example-cloudflare-worker/package.json \
+	packages/example-cloudflare-worker-iceberg/package.json \
 	packages/documentation/package.json
 
 NATIVE_BUILD_SOURCES := \
@@ -87,6 +88,7 @@ $(SYNC_VERSIONS_STAMP): Makefile $(SYNC_VERSION_FILES)
 	cd packages/ducklings-workers && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-browser && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-cloudflare-worker && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/example-cloudflare-worker-iceberg && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/documentation && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	@touch $@
 	@echo "Versions synced!"

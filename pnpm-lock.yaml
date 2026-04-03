@@ -58,7 +58,7 @@ importers:
         version: 2.3.0
       vite:
         specifier: ^5.0.0 || ^6.0.0 || ^7.0.0
-        version: 7.3.1(@types/node@22.19.7)(yaml@2.8.2)
+        version: 7.3.1(@types/node@25.4.0)(yaml@2.8.2)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.6
@@ -102,6 +102,28 @@ importers:
         version: 4.71.0(@cloudflare/workers-types@4.20260310.1)
 
   packages/example-cloudflare-worker:
+    dependencies:
+      '@ducklings/workers':
+        specifier: workspace:*
+        version: link:../ducklings-workers
+    devDependencies:
+      '@cloudflare/vite-plugin':
+        specifier: ^1.26.1
+        version: 1.26.1(vite@7.3.1(@types/node@25.4.0)(yaml@2.8.2))(workerd@1.20260301.1)(wrangler@4.71.0(@cloudflare/workers-types@4.20260310.1))
+      '@cloudflare/workers-types':
+        specifier: ^4.20260310.1
+        version: 4.20260310.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@25.4.0)(yaml@2.8.2)
+      wrangler:
+        specifier: ^4.71.0
+        version: 4.71.0(@cloudflare/workers-types@4.20260310.1)
+
+  packages/example-cloudflare-worker-iceberg:
     dependencies:
       '@ducklings/workers':
         specifier: workspace:*
@@ -1022,9 +1044,6 @@ packages:
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
 
-  '@types/node@22.19.7':
-    resolution: {integrity: sha512-MciR4AKGHWl7xwxkBa6xUGxQJ4VBOmPTF7sL+iGzuahOFaO0jHCsuEfS80pan1ef4gWId1oWOweIhrDEYLuaOw==}
-
   '@types/node@25.4.0':
     resolution: {integrity: sha512-9wLpoeWuBlcbBpOY3XmzSTG3oscB6xjBEEtn+pYXTfhyXhIxC5FsBer2KTopBlvKEiW9l13po9fq+SJY/5lkhw==}
 
@@ -1466,9 +1485,6 @@ packages:
 
   ufo@1.6.3:
     resolution: {integrity: sha512-yDJTmhydvl5lJzBmy/hyOAA0d+aqCBuwl818haVdYCRrWV84o7YyeVm4QlVHStqNrrJSTb6jKuFAVqAFsr+K3Q==}
-
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
@@ -2176,11 +2192,6 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
-  '@types/node@22.19.7':
-    dependencies:
-      undici-types: 6.21.0
-    optional: true
-
   '@types/node@25.4.0':
     dependencies:
       undici-types: 7.18.2
@@ -2510,6 +2521,7 @@ snapshots:
       nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
+    optional: true
 
   punycode.js@2.3.1: {}
 
@@ -2709,9 +2721,6 @@ snapshots:
 
   ufo@1.6.3: {}
 
-  undici-types@6.21.0:
-    optional: true
-
   undici-types@7.18.2: {}
 
   undici@7.18.2: {}
@@ -2720,26 +2729,13 @@ snapshots:
     dependencies:
       pathe: 2.0.3
 
-  vite@7.3.1(@types/node@22.19.7)(yaml@2.8.2):
+  vite@7.3.1(@types/node@25.4.0)(yaml@2.8.2):
     dependencies:
       esbuild: 0.27.2
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
       postcss: 8.5.6
       rollup: 4.57.0
-      tinyglobby: 0.2.15
-    optionalDependencies:
-      '@types/node': 22.19.7
-      fsevents: 2.3.3
-      yaml: 2.8.2
-
-  vite@7.3.1(@types/node@25.4.0)(yaml@2.8.2):
-    dependencies:
-      esbuild: 0.27.3
-      fdir: 6.5.0(picomatch@4.0.3)
-      picomatch: 4.0.3
-      postcss: 8.5.8
-      rollup: 4.59.0
       tinyglobby: 0.2.15
     optionalDependencies:
       '@types/node': 25.4.0
