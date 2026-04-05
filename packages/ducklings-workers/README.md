@@ -4,7 +4,7 @@ Minimal DuckDB WASM for Cloudflare Workers. Async API with full TypeScript suppo
 
 > **Important:** This package requires a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) due to the WASM size (~9.7MB). The free plan has a 3MB limit, while paid plans support up to 10MB.
 >
-> **Extension note:** The default workers build excludes DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard `@ducklings/workers` package. The standard `@ducklings/browser` package now omits `json` as well for the same reason.
+> **Extension note:** The published `@ducklings/workers` package does not bundle DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard package. The published `@ducklings/browser` package omits the same extension for the same reason.
 
 ## Installation
 
@@ -116,7 +116,7 @@ The plugin:
 
 Cloudflare Workers doesn't support synchronous XMLHttpRequest (a browser-only API). This package uses Emscripten's Asyncify to enable async `fetch()` calls, making httpfs work properly for loading remote Parquet and CSV files, plus the Iceberg/httpfs write paths used by this repo.
 
-The standard browser and workers packages both omit the `json` extension. Remote Parquet and CSV access work in the standard package. Remote JSON queries via `read_json()` do not.
+The published browser and workers packages do not bundle the `json` extension. Remote Parquet and CSV access work in the standard packages. Remote JSON queries via `read_json()` do not.
 
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
@@ -183,7 +183,7 @@ const csv = await conn.query(`
 
 ```
 
-`read_json()`, JSON functions such as `json_extract(...)`, and the `::JSON` type alias are not available in the default workers build. The default browser build omits the same extension.
+`read_json()`, JSON functions such as `json_extract(...)`, and the `::JSON` type alias are not available in the standard workers package because DuckDB's `json` extension is not bundled. The standard browser package omits the same extension.
 
 ### R2 Secrets
 

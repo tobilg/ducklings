@@ -13,7 +13,6 @@
 import {
   bool,
   type DataType,
-  dateDay,
   float32,
   float64,
   int8,
@@ -21,9 +20,7 @@ import {
   int32,
   int64,
   type Table,
-  TimeUnit,
   tableFromArrays,
-  timestamp,
   uint8,
   uint16,
   uint32,
@@ -479,6 +476,188 @@ export function version(): string {
   return module.UTF8ToString(versionPtr);
 }
 
+const JS_MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const JS_MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+const utf8Decoder = new TextDecoder();
+
+function toSafeNumberOrString(value: bigint, unsigned = false): number | string {
+  const min = unsigned ? 0n : JS_MIN_SAFE_INTEGER_BIGINT;
+  if (value >= min && value <= JS_MAX_SAFE_INTEGER_BIGINT) {
+    return Number(value);
+  }
+  return value.toString();
+}
+
+function readSignedInt64(mod: EmscriptenModule, wordOffset: number): bigint {
+  return (BigInt(mod.HEAP32[wordOffset + 1]) << 32n) + BigInt(mod.HEAPU32[wordOffset]);
+}
+
+function readUnsignedInt64(mod: EmscriptenModule, wordOffset: number): bigint {
+  return (BigInt(mod.HEAPU32[wordOffset + 1]) << 32n) + BigInt(mod.HEAPU32[wordOffset]);
+}
+
+function readSignedHugeint(mod: EmscriptenModule, wordOffset: number): bigint {
+  const low64 = readUnsignedInt64(mod, wordOffset);
+  const high64 = (BigInt(mod.HEAP32[wordOffset + 3]) << 32n) + BigInt(mod.HEAPU32[wordOffset + 2]);
+  return (high64 << 64n) + low64;
+}
+
+function readUnsignedHugeint(mod: EmscriptenModule, wordOffset: number): bigint {
+  const low64 = readUnsignedInt64(mod, wordOffset);
+  const high64 =
+    (BigInt(mod.HEAPU32[wordOffset + 3]) << 32n) + BigInt(mod.HEAPU32[wordOffset + 2]);
+  return (high64 << 64n) + low64;
+}
+
+function stringifyIntegersForArrow(values: unknown[]): unknown[] {
+  return values.map((value) => (value == null ? null : String(value)));
+}
+
+function normalizeInt64ValuesForArrow(values: unknown[]): unknown[] {
+  return values.map((value) => {
+    if (value == null) return null;
+    if (typeof value === 'bigint') return value;
+    if (typeof value === 'number') return BigInt(value);
+    return BigInt(String(value));
+  });
+}
+
+function canDecodeRawColumnData(duckdbType: number): boolean {
+  switch (duckdbType) {
+    case DuckDBType.BOOLEAN:
+    case DuckDBType.TINYINT:
+    case DuckDBType.SMALLINT:
+    case DuckDBType.INTEGER:
+    case DuckDBType.BIGINT:
+    case DuckDBType.UTINYINT:
+    case DuckDBType.USMALLINT:
+    case DuckDBType.UINTEGER:
+    case DuckDBType.UBIGINT:
+    case DuckDBType.HUGEINT:
+    case DuckDBType.UHUGEINT:
+    case DuckDBType.FLOAT:
+    case DuckDBType.DOUBLE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+function shouldRepresentAsUtf8Arrow(duckdbType: number): boolean {
+  switch (duckdbType) {
+    case DuckDBType.BOOLEAN:
+    case DuckDBType.TINYINT:
+    case DuckDBType.SMALLINT:
+    case DuckDBType.INTEGER:
+    case DuckDBType.BIGINT:
+    case DuckDBType.UTINYINT:
+    case DuckDBType.USMALLINT:
+    case DuckDBType.UINTEGER:
+    case DuckDBType.UBIGINT:
+    case DuckDBType.FLOAT:
+    case DuckDBType.DOUBLE:
+      return false;
+    default:
+      return true;
+  }
+}
+
+function readInlineOrHeapBytes(mod: EmscriptenModule, structPtr: number): Uint8Array {
+  const length = mod.HEAPU32[structPtr >> 2];
+  if (length <= 12) {
+    return mod.HEAPU8.slice(structPtr + 4, structPtr + 4 + length);
+  }
+  const valuePtr = mod.HEAPU32[(structPtr + 8) >> 2];
+  return mod.HEAPU8.slice(valuePtr, valuePtr + length);
+}
+
+function readInlineOrHeapString(mod: EmscriptenModule, structPtr: number): string {
+  return utf8Decoder.decode(readInlineOrHeapBytes(mod, structPtr));
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function readBlobHexValue(mod: EmscriptenModule, structPtr: number): string {
+  return `\\x${bytesToHex(readInlineOrHeapBytes(mod, structPtr))}`;
+}
+
+function readTextResultValue(
+  mod: EmscriptenModule,
+  resultPtr: number,
+  colIdx: number,
+  rowIdx: number,
+): string | null {
+  const strPtr = mod.ccall(
+    'duckdb_wasm_result_value_to_string',
+    'number',
+    ['number', 'number', 'number', 'number', 'number'],
+    [resultPtr, colIdx, 0, rowIdx, 0],
+  ) as number;
+
+  if (!strPtr) {
+    return null;
+  }
+
+  try {
+    return mod.UTF8ToString(strPtr);
+  } finally {
+    mod._free(strPtr);
+  }
+}
+
+function readTextColumnDataFromResult(
+  mod: EmscriptenModule,
+  resultPtr: number,
+  colIdx: number,
+  rowCount: number,
+  rowOffset = 0,
+): unknown[] {
+  const values: unknown[] = new Array(rowCount);
+  for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+    values[rowIdx] = readTextResultValue(mod, resultPtr, colIdx, rowOffset + rowIdx);
+  }
+  return values;
+}
+
+function readTextChunkValue(
+  mod: EmscriptenModule,
+  chunkPtr: number,
+  colIdx: number,
+  rowIdx: number,
+): string | null {
+  const strPtr = mod.ccall(
+    'duckdb_wasm_data_chunk_value_to_string',
+    'number',
+    ['number', 'number', 'number', 'number', 'number'],
+    [chunkPtr, colIdx, 0, rowIdx, 0],
+  ) as number;
+
+  if (!strPtr) {
+    return null;
+  }
+
+  try {
+    return mod.UTF8ToString(strPtr);
+  } finally {
+    mod._free(strPtr);
+  }
+}
+
+function readTextColumnDataFromChunk(
+  mod: EmscriptenModule,
+  chunkPtr: number,
+  colIdx: number,
+  rowCount: number,
+): unknown[] {
+  const values: unknown[] = new Array(rowCount);
+  for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+    values[rowIdx] = readTextChunkValue(mod, chunkPtr, colIdx, rowIdx);
+  }
+  return values;
+}
+
 /**
  * Reads column data from DuckDB result with proper type conversion.
  * @internal
@@ -546,21 +725,7 @@ function readColumnData(
         if (hasNullmask && mod.HEAPU8[nullmaskPtr + i]) {
           result[i] = null;
         } else {
-          const low = mod.HEAPU32[offset + i * 2];
-          const high = mod.HEAP32[offset + i * 2 + 1];
-          // Check if value fits in safe integer range before computing
-          // Safe range: high is 0 (positive small) or -1 (negative small)
-          if (high === 0 && low <= 0x1fffffffffffff) {
-            result[i] = low;
-          } else if (high === -1 && low >= 0x80000000) {
-            // Small negative number
-            result[i] = high * 0x100000000 + low;
-          } else {
-            // Large value - return as string for JSON compatibility
-            // Compute using BigInt for precision, then convert to string
-            const bigValue = BigInt(high) * BigInt(0x100000000) + BigInt(low >>> 0);
-            result[i] = bigValue.toString();
-          }
+          result[i] = toSafeNumberOrString(readSignedInt64(mod, offset + i * 2));
         }
       }
       break;
@@ -607,16 +772,31 @@ function readColumnData(
         if (hasNullmask && mod.HEAPU8[nullmaskPtr + i]) {
           result[i] = null;
         } else {
-          const low = mod.HEAPU32[offset + i * 2];
-          const high = mod.HEAPU32[offset + i * 2 + 1];
-          // Check if value fits in safe integer range before computing
-          if (high === 0 && low <= 0x1fffffffffffff) {
-            result[i] = low;
-          } else {
-            // Large value - return as string for JSON compatibility
-            const bigValue = BigInt(high) * BigInt(0x100000000) + BigInt(low);
-            result[i] = bigValue.toString();
-          }
+          result[i] = toSafeNumberOrString(readUnsignedInt64(mod, offset + i * 2), true);
+        }
+      }
+      break;
+    }
+
+    case DuckDBType.HUGEINT: {
+      const offset = dataPtr >> 2;
+      for (let i = 0; i < rowCount; i++) {
+        if (hasNullmask && mod.HEAPU8[nullmaskPtr + i]) {
+          result[i] = null;
+        } else {
+          result[i] = toSafeNumberOrString(readSignedHugeint(mod, offset + i * 4));
+        }
+      }
+      break;
+    }
+
+    case DuckDBType.UHUGEINT: {
+      const offset = dataPtr >> 2;
+      for (let i = 0; i < rowCount; i++) {
+        if (hasNullmask && mod.HEAPU8[nullmaskPtr + i]) {
+          result[i] = null;
+        } else {
+          result[i] = toSafeNumberOrString(readUnsignedHugeint(mod, offset + i * 4), true);
         }
       }
       break;
@@ -641,6 +821,17 @@ function readColumnData(
           result[i] = null;
         } else {
           result[i] = mod.HEAPF64[offset + i];
+        }
+      }
+      break;
+    }
+
+    case DuckDBType.BLOB: {
+      for (let i = 0; i < rowCount; i++) {
+        if (hasNullmask && mod.HEAPU8[nullmaskPtr + i]) {
+          result[i] = null;
+        } else {
+          result[i] = readBlobHexValue(mod, dataPtr + i * 16);
         }
       }
       break;
@@ -952,37 +1143,9 @@ export class PreparedStatement {
           [resultPtr, colIdx],
         ) as number;
 
-        if (col.type === DuckDBType.VARCHAR || dataPtr === 0) {
-          // VARCHAR or unsupported type - use value_varchar
-          const values: unknown[] = new Array(rowCount);
-          for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
-            const isNull = mod.ccall(
-              'duckdb_value_is_null',
-              'number',
-              ['number', 'number', 'number', 'number', 'number'],
-              [resultPtr, colIdx, 0, rowIdx, 0],
-            ) as number;
-
-            if (isNull) {
-              values[rowIdx] = null;
-            } else {
-              const strPtr = mod.ccall(
-                'duckdb_value_varchar',
-                'number',
-                ['number', 'number', 'number', 'number', 'number'],
-                [resultPtr, colIdx, 0, rowIdx, 0],
-              ) as number;
-              if (strPtr) {
-                values[rowIdx] = mod.UTF8ToString(strPtr);
-                mod._free(strPtr);
-              } else {
-                values[rowIdx] = null;
-              }
-            }
-          }
-          columnData.push(values);
+        if (!canDecodeRawColumnData(col.type) || dataPtr === 0) {
+          columnData.push(readTextColumnDataFromResult(mod, resultPtr, colIdx, rowCount));
         } else {
-          // Use type-specific extraction
           columnData.push(readColumnData(mod, dataPtr, nullmaskPtr, rowCount, col.type));
         }
       }
@@ -1128,6 +1291,9 @@ export class DataChunk {
     ) as number;
 
     const columnType = this.columns[columnIndex]?.type ?? DuckDBType.VARCHAR;
+    if (!canDecodeRawColumnData(columnType)) {
+      return readTextColumnDataFromChunk(mod, this.chunkPtr, columnIndex, rows);
+    }
     return this.readVectorData(dataPtr, validityPtr, rows, columnType);
   }
 
@@ -1208,9 +1374,43 @@ export class DataChunk {
           if (isRowNull(i)) {
             result[i] = null;
           } else {
-            const low = mod.HEAPU32[offset + i * 2];
-            const high = mod.HEAP32[offset + i * 2 + 1];
-            result[i] = high * 0x100000000 + low;
+            result[i] = toSafeNumberOrString(readSignedInt64(mod, offset + i * 2));
+          }
+        }
+        break;
+      }
+
+      case DuckDBType.UBIGINT: {
+        const offset = dataPtr >> 2;
+        for (let i = 0; i < rowCount; i++) {
+          if (isRowNull(i)) {
+            result[i] = null;
+          } else {
+            result[i] = toSafeNumberOrString(readUnsignedInt64(mod, offset + i * 2), true);
+          }
+        }
+        break;
+      }
+
+      case DuckDBType.HUGEINT: {
+        const offset = dataPtr >> 2;
+        for (let i = 0; i < rowCount; i++) {
+          if (isRowNull(i)) {
+            result[i] = null;
+          } else {
+            result[i] = toSafeNumberOrString(readSignedHugeint(mod, offset + i * 4));
+          }
+        }
+        break;
+      }
+
+      case DuckDBType.UHUGEINT: {
+        const offset = dataPtr >> 2;
+        for (let i = 0; i < rowCount; i++) {
+          if (isRowNull(i)) {
+            result[i] = null;
+          } else {
+            result[i] = toSafeNumberOrString(readUnsignedHugeint(mod, offset + i * 4), true);
           }
         }
         break;
@@ -1231,6 +1431,12 @@ export class DataChunk {
         }
         break;
       }
+
+      case DuckDBType.BLOB:
+        for (let i = 0; i < rowCount; i++) {
+          result[i] = isRowNull(i) ? null : readBlobHexValue(mod, dataPtr + i * 16);
+        }
+        break;
 
       case DuckDBType.DATE: {
         const offset = dataPtr >> 2;
@@ -1268,19 +1474,7 @@ export class DataChunk {
           if (isRowNull(i)) {
             result[i] = null;
           } else {
-            const strBase = dataPtr + i * 16;
-            const length = mod.HEAP32[strBase >> 2];
-
-            if (length <= 12) {
-              let str = '';
-              for (let j = 0; j < length; j++) {
-                str += String.fromCharCode(mod.HEAPU8[strBase + 4 + j]);
-              }
-              result[i] = str;
-            } else {
-              const strPtr = mod.HEAP32[(strBase + 8) >> 2];
-              result[i] = mod.UTF8ToString(strPtr);
-            }
+            result[i] = readInlineOrHeapString(mod, dataPtr + i * 16);
           }
         }
         break;
@@ -1410,9 +1604,16 @@ export class StreamingResult implements Iterable<DataChunk> {
 
     for (const chunk of this) {
       for (let c = 0; c < this.columns.length; c++) {
-        const colName = this.columns[c].name;
+        const column = this.columns[c];
+        const colName = column.name;
         const chunkData = chunk.getColumn(c);
-        columnData[colName].push(...chunkData);
+        const normalizedChunkData =
+          column.type === DuckDBType.BIGINT || column.type === DuckDBType.UBIGINT
+            ? normalizeInt64ValuesForArrow(chunkData)
+            : column.type === DuckDBType.HUGEINT || column.type === DuckDBType.UHUGEINT
+              ? stringifyIntegersForArrow(chunkData)
+              : chunkData;
+        columnData[colName].push(...normalizedChunkData);
       }
     }
 
@@ -1420,6 +1621,10 @@ export class StreamingResult implements Iterable<DataChunk> {
   }
 
   private getFlechetteType(duckdbType: DuckDBTypeId): DataType {
+    if (shouldRepresentAsUtf8Arrow(duckdbType)) {
+      return utf8();
+    }
+
     switch (duckdbType) {
       case DuckDBType.BOOLEAN:
         return bool();
@@ -1443,13 +1648,6 @@ export class StreamingResult implements Iterable<DataChunk> {
         return float32();
       case DuckDBType.DOUBLE:
         return float64();
-      case DuckDBType.VARCHAR:
-        return utf8();
-      case DuckDBType.DATE:
-        return dateDay();
-      case DuckDBType.TIMESTAMP:
-      case DuckDBType.TIMESTAMP_TZ:
-        return timestamp(TimeUnit.MICROSECOND);
       default:
         return utf8();
     }
@@ -1794,34 +1992,8 @@ export class Connection {
           [resultPtr, colIdx],
         ) as number;
 
-        if (col.type === DuckDBType.VARCHAR || dataPtr === 0) {
-          const values: unknown[] = new Array(rowCount);
-          for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
-            const isNull = module.ccall(
-              'duckdb_value_is_null',
-              'number',
-              ['number', 'number', 'number', 'number', 'number'],
-              [resultPtr, colIdx, 0, rowIdx, 0],
-            ) as number;
-
-            if (isNull) {
-              values[rowIdx] = null;
-            } else {
-              const strPtr = module.ccall(
-                'duckdb_value_varchar',
-                'number',
-                ['number', 'number', 'number', 'number', 'number'],
-                [resultPtr, colIdx, 0, rowIdx, 0],
-              ) as number;
-              if (strPtr) {
-                values[rowIdx] = module.UTF8ToString(strPtr);
-                module._free(strPtr);
-              } else {
-                values[rowIdx] = null;
-              }
-            }
-          }
-          columnData.push(values);
+        if (!canDecodeRawColumnData(col.type) || dataPtr === 0) {
+          columnData.push(readTextColumnDataFromResult(module, resultPtr, colIdx, rowCount));
         } else {
           columnData.push(this.readColumnData(dataPtr, nullmaskPtr, rowCount, col.type));
         }
@@ -1909,19 +2081,7 @@ export class Connection {
           if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
             result[i] = null;
           } else {
-            const low = module.HEAPU32[offset + i * 2];
-            const high = module.HEAP32[offset + i * 2 + 1];
-            // Check if value fits in safe integer range before computing
-            if (high === 0 && low <= 0x1fffffffffffff) {
-              result[i] = low;
-            } else if (high === -1 && low >= 0x80000000) {
-              // Small negative number
-              result[i] = high * 0x100000000 + low;
-            } else {
-              // Large value - return as string for JSON compatibility
-              const bigValue = BigInt(high) * BigInt(0x100000000) + BigInt(low >>> 0);
-              result[i] = bigValue.toString();
-            }
+            result[i] = toSafeNumberOrString(readSignedInt64(module, offset + i * 2));
           }
         }
         break;
@@ -1968,16 +2128,34 @@ export class Connection {
           if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
             result[i] = null;
           } else {
-            const low = module.HEAPU32[offset + i * 2];
-            const high = module.HEAPU32[offset + i * 2 + 1];
-            // Check if value fits in safe integer range before computing
-            if (high === 0 && low <= 0x1fffffffffffff) {
-              result[i] = low;
-            } else {
-              // Large value - return as string for JSON compatibility
-              const bigValue = BigInt(high) * BigInt(0x100000000) + BigInt(low);
-              result[i] = bigValue.toString();
-            }
+            result[i] = toSafeNumberOrString(readUnsignedInt64(module, offset + i * 2), true);
+          }
+        }
+        break;
+      }
+
+      case DuckDBType.HUGEINT: {
+        const offset = dataPtr >> 2;
+        for (let i = 0; i < rowCount; i++) {
+          if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
+            result[i] = null;
+          } else {
+            result[i] = toSafeNumberOrString(readSignedHugeint(module, offset + i * 4));
+          }
+        }
+        break;
+      }
+
+      case DuckDBType.UHUGEINT: {
+        const offset = dataPtr >> 2;
+        for (let i = 0; i < rowCount; i++) {
+          if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
+            result[i] = null;
+          } else {
+            result[i] = toSafeNumberOrString(
+              readUnsignedHugeint(module, offset + i * 4),
+              true,
+            );
           }
         }
         break;
@@ -2002,6 +2180,17 @@ export class Connection {
             result[i] = null;
           } else {
             result[i] = module.HEAPF64[offset + i];
+          }
+        }
+        break;
+      }
+
+      case DuckDBType.BLOB: {
+        for (let i = 0; i < rowCount; i++) {
+          if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
+            result[i] = null;
+          } else {
+            result[i] = readBlobHexValue(module, dataPtr + i * 16);
           }
         }
         break;
@@ -2147,36 +2336,16 @@ export class Connection {
           [resultPtr, colIdx],
         ) as number;
 
-        if (col.type === DuckDBType.VARCHAR || dataPtr === 0) {
-          const values: unknown[] = new Array(rowCount);
-          for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
-            const isNull = module.ccall(
-              'duckdb_value_is_null',
-              'number',
-              ['number', 'number', 'number', 'number', 'number'],
-              [resultPtr, colIdx, 0, rowIdx, 0],
-            ) as number;
-
-            if (isNull) {
-              values[rowIdx] = null;
-            } else {
-              const strPtr = module.ccall(
-                'duckdb_value_varchar',
-                'number',
-                ['number', 'number', 'number', 'number', 'number'],
-                [resultPtr, colIdx, 0, rowIdx, 0],
-              ) as number;
-              if (strPtr) {
-                values[rowIdx] = module.UTF8ToString(strPtr);
-                module._free(strPtr);
-              } else {
-                values[rowIdx] = null;
-              }
-            }
-          }
-          tableData[col.name] = values;
+        if (!canDecodeRawColumnData(col.type) || dataPtr === 0) {
+          tableData[col.name] = readTextColumnDataFromResult(module, resultPtr, colIdx, rowCount);
         } else {
-          tableData[col.name] = this.readColumnData(dataPtr, nullmaskPtr, rowCount, col.type);
+          const values = this.readColumnData(dataPtr, nullmaskPtr, rowCount, col.type);
+          tableData[col.name] =
+            col.type === DuckDBType.BIGINT || col.type === DuckDBType.UBIGINT
+              ? normalizeInt64ValuesForArrow(values)
+              : col.type === DuckDBType.HUGEINT || col.type === DuckDBType.UHUGEINT
+                ? stringifyIntegersForArrow(values)
+                : values;
         }
 
         types[col.name] = col.flechetteType;
@@ -2191,6 +2360,10 @@ export class Connection {
   }
 
   private getFlechetteType(duckdbType: number): DataType | null {
+    if (shouldRepresentAsUtf8Arrow(duckdbType)) {
+      return utf8();
+    }
+
     switch (duckdbType) {
       case DuckDBType.BOOLEAN:
         return bool();
@@ -2214,13 +2387,6 @@ export class Connection {
         return float32();
       case DuckDBType.DOUBLE:
         return float64();
-      case DuckDBType.VARCHAR:
-        return utf8();
-      case DuckDBType.DATE:
-        return dateDay();
-      case DuckDBType.TIMESTAMP:
-      case DuckDBType.TIMESTAMP_TZ:
-        return timestamp(TimeUnit.MICROSECOND);
       default:
         return utf8();
     }

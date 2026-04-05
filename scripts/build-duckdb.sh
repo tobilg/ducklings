@@ -1069,6 +1069,7 @@ link_wasm_module() {
     cat > "${BUILD_DIR}/main.cpp" << 'MAINEOF'
 // Entry point for DuckDB WASM with statically linked extensions
 #include "duckdb.hpp"
+#include "duckdb/common/types/blob.hpp"
 #include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
@@ -1092,6 +1093,22 @@ bool preloaded_iceberg = true;
 
 // Global error string for debugging extension init failures
 static char g_init_error[1024] = {0};
+
+static char *duckdb_wasm_stringify_value(const duckdb::Value &value) {
+    if (value.IsNull()) return nullptr;
+
+    try {
+        std::string str;
+        if (value.type().id() == duckdb::LogicalTypeId::BLOB) {
+            str = duckdb::Blob::ToString(duckdb::StringValue::Get(value));
+        } else {
+            str = value.ToString();
+        }
+        return strdup(str.c_str());
+    } catch (...) {
+        return nullptr;
+    }
+}
 
 extern "C" {
 
@@ -1140,6 +1157,40 @@ void duckdb_wasm_httpfs_init(duckdb_database db) {
 duckdb_state duckdb_wasm_clear_bindings(duckdb_prepared_statement stmt) {
     if (!stmt) return DuckDBError;
     return duckdb_clear_bindings(stmt);
+}
+
+// Read a result cell using DuckDB's internal Value::ToString instead of the deprecated C API materialization.
+char *duckdb_wasm_result_value_to_string(duckdb_result *result, idx_t col, idx_t row) {
+    if (!result || !result->internal_data) return nullptr;
+
+    try {
+        auto *result_data = reinterpret_cast<duckdb::DuckDBResultData *>(result->internal_data);
+        if (!result_data || !result_data->result) return nullptr;
+        if (result_data->result->type != duckdb::QueryResultType::MATERIALIZED_RESULT) return nullptr;
+
+        auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data->result);
+        if (col >= materialized.ColumnCount() || row >= materialized.RowCount()) return nullptr;
+
+        auto value = materialized.GetValue(col, row);
+        return duckdb_wasm_stringify_value(value);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// Read a chunk cell using Vector/DataChunk GetValue so nested/logical types can still be stringified correctly.
+char *duckdb_wasm_data_chunk_value_to_string(duckdb_data_chunk chunk, idx_t col, idx_t row) {
+    if (!chunk) return nullptr;
+
+    try {
+        auto *dchunk = reinterpret_cast<duckdb::DataChunk *>(chunk);
+        if (!dchunk || col >= dchunk->ColumnCount() || row >= dchunk->size()) return nullptr;
+
+        auto value = dchunk->GetValue(col, row);
+        return duckdb_wasm_stringify_value(value);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 } // extern "C"
@@ -1214,6 +1265,8 @@ MAINEOF
         '_duckdb_wasm_httpfs_init', \
         '_duckdb_wasm_init_error', \
         '_duckdb_wasm_clear_bindings', \
+        '_duckdb_wasm_result_value_to_string', \
+        '_duckdb_wasm_data_chunk_value_to_string', \
         '_duckdb_wasm_insert_arrow_ipc', \
         '_duckdb_create_config', \
         '_duckdb_set_config', \

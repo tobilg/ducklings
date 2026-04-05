@@ -12,7 +12,7 @@ DUCKDB_ICEBERG_VERSION := 8b1380d4d960acaa25c66fd650fa8785f4cd088a #v1.5-variega
 DUCKDB_AVRO_VERSION := fa61c8e2bfa5b173749bf9db4fc853dea78969b6 #v1.5-variegata
 NANOARROW_VERSION := apache-arrow-nanoarrow-0.8.0
 VCPKG_BASELINE := 84bab45d415d22042bd0b9081aea57f362da3f35
-VERSION_SUFFIX := -dev.2
+VERSION_SUFFIX := -dev.3
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 define find_files

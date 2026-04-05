@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/documentation",
-  "version": "1.5.1",
+  "version": "1.5.1-dev.2",
   "private": true,
   "type": "module",
   "scripts": {

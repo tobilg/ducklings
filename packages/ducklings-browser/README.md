@@ -42,7 +42,7 @@ await db.close();
 
 ## Extension Availability
 
-The default browser build excludes DuckDB's `json` extension so the bundled WASM stays under Cloudflare Pages' 25 MiB per-file limit.
+The published browser package does not bundle DuckDB's `json` extension so the bundled WASM stays under Cloudflare Pages' 25 MiB per-file limit.
 
 JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` are therefore not available in the standard `@ducklings/browser` package. Use a custom build if you need DuckDB's `json` extension.
 

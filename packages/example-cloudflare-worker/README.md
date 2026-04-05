@@ -5,10 +5,9 @@ This example demonstrates using DuckDB WASM in a Cloudflare Worker to provide a 
 ## Features
 
 - In-memory tables and queries
-- Remote file access via httpfs (Parquet, CSV, JSON)
+- Remote file access via httpfs (Parquet, CSV)
 - Optional R2 bucket access via DuckDB secrets
 - Arrow IPC stream output support
-- JSON functions for parsing and manipulation
 
 ## Prerequisites
 
@@ -49,7 +48,7 @@ pnpm deploy
 | `/orders` | GET | List all sample orders |
 | `/stats` | GET | Order statistics by user |
 | `/remote-parquet` | GET | Query remote Parquet file via httpfs |
-| `/json` | GET | JSON function examples |
+| `/remote-csv` | GET | Query remote CSV file via httpfs |
 
 ### Example: Custom Query
 
@@ -127,7 +126,7 @@ The worker is configured via `wrangler.jsonc`:
 - **Paid Plan Required**: The DuckDB WASM binary is ~9.7MB gzipped, which exceeds the free tier limit of 3MB. A paid Workers plan (10MB limit) is required.
 - **Cold Start**: First request may be slower due to WASM initialization. Subsequent requests reuse the initialized database.
 - **Memory Limit**: Workers have a 128MB memory limit. Large queries or datasets may exceed this.
-- **No Dynamic Extensions**: Only Parquet, JSON, and httpfs extensions are available. `INSTALL`/`LOAD` commands will not work.
+- **No Dynamic Extensions**: The standard build includes Parquet and httpfs. DuckDB's `json` extension is not bundled anymore, and `INSTALL`/`LOAD` will not add it at runtime.
 
 ## License
 

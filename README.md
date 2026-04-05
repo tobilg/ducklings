@@ -29,7 +29,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 - **Arrow support**: Query results as Arrow Tables, insert data via Arrow IPC streams, powered by [Flechette](https://github.com/uwdata/flechette)
 - **Parquet support**: Read Parquet files with built-in extension
 - **httpfs support**: Load remote files via HTTP/HTTPS
-- **JSON support**: Omitted from the default browser and workers builds to stay within Cloudflare deployment size limits; use a custom build if you need DuckDB's `json` extension
+- **JSON support**: Not bundled in the published browser or workers packages to stay within Cloudflare deployment size limits; use a custom build if you need DuckDB's `json` extension
 - **Cloudflare Workers**: First-class support with dedicated async package
 - **Browser support**: Works in modern browsers with ES modules
 
@@ -41,7 +41,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 | `httpfs` | :white_check_mark: | :white_check_mark: |
 | `json` | Default build: :x: | Default build: :x: |
 
-The default browser and workers builds both exclude the `json` extension so the bundled artifacts stay within Cloudflare Pages and Workers size limits. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
+The published browser and workers packages do not bundle DuckDB's `json` extension so the artifacts stay within Cloudflare Pages and Workers size limits. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
 
 ## Current Status
 
@@ -493,7 +493,7 @@ const csvData = await conn.query(`
 `);
 ```
 
-`read_json('https://...')` is not available in the default `@ducklings/browser` or `@ducklings/workers` packages. It requires a custom build with DuckDB's `json` extension enabled.
+`read_json('https://...')` is not available in the standard `@ducklings/browser` or `@ducklings/workers` packages because they do not bundle DuckDB's `json` extension. It requires a custom build with that extension enabled.
 
 ### S3 and R2 Secrets
 
@@ -551,7 +551,7 @@ See the [Cloudflare Workers example](./packages/example-cloudflare-worker/) for 
 
 ### JSON Functions
 
-The default `@ducklings/browser` and `@ducklings/workers` packages omit DuckDB's `json` extension to keep the bundled artifacts small enough for Cloudflare Pages and Workers deployment.
+The published `@ducklings/browser` and `@ducklings/workers` packages do not bundle DuckDB's `json` extension so the artifacts stay small enough for Cloudflare Pages and Workers deployment.
 
 If you need JSON functions such as `json_extract(...)`, the `::JSON` type alias, or file readers like `read_json()` / `read_ndjson_auto()`, build a custom WASM artifact with the `json` extension enabled.
 
@@ -582,7 +582,7 @@ The WASM binary is optimized for size using:
 - **wasm-opt**: Binaryen post-processing with `-Oz --converge`
 - **Reduced exports**: Only 59 essential C functions exported
 
-Result: **~6.3 MiB gzipped** for browser and **~9.7 MiB gzipped** for the default workers build. Both default builds omit the JSON extension to stay within Cloudflare Pages and Workers deployment size limits.
+Result: **~6.3 MiB gzipped** for browser and **~9.7 MiB gzipped** for the default workers build. Neither published package bundles the JSON extension, which keeps the artifacts within Cloudflare Pages and Workers deployment size limits.
 
 ## Development
 

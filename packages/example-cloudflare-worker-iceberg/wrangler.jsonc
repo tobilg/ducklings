@@ -1,7 +1,9 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ducklings-worker-iceberg",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-01-11",
-  "compatibility_flags": ["nodejs_compat"]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "ducklings-worker-iceberg",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-01-11",
+	"compatibility_flags": [
+		"nodejs_compat"
+	]
 }

@@ -88,7 +88,8 @@ const results = await stmt.run();
 - **Streaming results**: Memory-efficient chunked processing
 - **Transactions**: BEGIN/COMMIT/ROLLBACK support
 - **Arrow support**: Query results as Arrow Tables via Flechette
-- **Parquet/JSON**: Built-in file format support
+- **Parquet/httpfs**: Built-in file format and remote file support
+- **JSON**: Not bundled in the standard packages; use a custom build if you need DuckDB's `json` extension
 - **httpfs**: Load remote files via HTTP/HTTPS
 - **File registration**: Register URLs, buffers, and text as virtual files
 

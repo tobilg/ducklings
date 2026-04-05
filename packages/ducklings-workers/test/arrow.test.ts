@@ -86,6 +86,21 @@ describe('Arrow IPC (Async)', () => {
       expect(restored.getChild('string_col')?.at(0)).toBe('hello');
       expect(restored.getChild('bool_col')?.at(0)).toBe(true);
     });
+
+    it('should stringify exact and complex result types that are not safe native JS values', async () => {
+      const table = await conn.queryArrow(`
+        SELECT
+          123.45::DECIMAL(10,2) AS dec_val,
+          TIMESTAMP_NS '2024-06-15 14:30:00.123456789' AS ts_ns_val,
+          [1, 2, 3] AS list_val,
+          '\\x48454C4C4F'::BLOB AS blob_val
+      `);
+
+      expect(table.getChild('dec_val')?.at(0)).toBe('123.45');
+      expect(table.getChild('ts_ns_val')?.at(0)).toBe('2024-06-15 14:30:00.123456789');
+      expect(table.getChild('list_val')?.at(0)).toBe('[1, 2, 3]');
+      expect(table.getChild('blob_val')?.at(0)).toBe('H454C4C4F');
+    });
   });
 
   describe('tableFromArrays()', () => {

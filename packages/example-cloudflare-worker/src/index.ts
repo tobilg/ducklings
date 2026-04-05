@@ -4,8 +4,7 @@
  * This example demonstrates using DuckDB WASM in a Cloudflare Worker
  * to provide a SQL query API endpoint with support for:
  * - In-memory tables and queries
- * - Remote file access via httpfs (Parquet, CSV, JSON)
- * - JSON functions for parsing and manipulation
+ * - Remote file access via httpfs (Parquet, CSV)
  *
  * NOTE: In the workers build, query() and execute() are async.
  * Always use: `await conn.query(...)` or `await conn.execute(...)`
@@ -147,8 +146,6 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
               '/stats': 'GET - Order statistics by user',
               '/remote-parquet': 'GET - Query remote Parquet file via httpfs',
               '/remote-csv': 'GET - Query remote CSV file via httpfs',
-              '/remote-json': 'GET - Query remote JSON API via httpfs',
-              '/json': 'GET - Demonstrate JSON functions',
             },
           }),
           {
@@ -345,57 +342,6 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             source: 'https://raw.githubusercontent.com/tobilg/public-cloud-provider-ip-ranges/main/data/providers/cloudflare.csv',
             data: remoteCsvData,
             rowCount: remoteCsvData.length,
-          }),
-          {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          }
-        );
-
-      case '/remote-json':
-        // Demonstrate querying a remote JSON API via httpfs
-        const remoteJsonData = await conn!.query(`
-          SELECT *
-          FROM read_json('https://api.tvmaze.com/search/shows?q=duck', auto_detect=true)
-        `);
-        return new Response(
-          JSON.stringify({
-            description: 'Remote JSON API query via httpfs',
-            source: 'https://api.tvmaze.com/search/shows?q=duck',
-            data: remoteJsonData,
-            rowCount: remoteJsonData.length,
-          }),
-          {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          }
-        );
-
-      case '/json':
-        // Demonstrate JSON functions
-        const jsonExamples = await conn!.query(`
-          SELECT
-            -- Parse a JSON string
-            json('{"name": "Alice", "age": 30}') AS parsed_json,
-
-            -- Extract value as JSON (includes quotes for strings)
-            json_extract('{"user": {"name": "Bob"}}', '$.user.name') AS json_value,
-
-            -- Extract value as string (no quotes)
-            json_extract_string('{"user": {"name": "Bob"}}', '$.user.name') AS string_value,
-
-            -- Using ->> operator (shorthand for json_extract_string)
-            '{"id": 1, "status": "active"}'::JSON->>'$.status' AS status,
-
-            -- Get JSON keys
-            json_keys('{"a": 1, "b": 2, "c": 3}') AS keys,
-
-            -- Convert struct to JSON
-            to_json({product: 'Widget', price: 29.99, tags: ['sale', 'new']}) AS struct_to_json
-        `);
-        return new Response(
-          JSON.stringify({
-            description: 'JSON function examples',
-            note: 'Use json_extract_string() or ->> operator to get raw string values without quotes',
-            data: jsonExamples,
           }),
           {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },

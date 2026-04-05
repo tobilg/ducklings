@@ -173,6 +173,22 @@ describe('Prepared Statements (Async)', () => {
 
       stmt.close();
     });
+
+    it('should decode stringified result types from prepared statements', async () => {
+      const stmt = conn.prepare(`
+        SELECT
+          123.45::DECIMAL(10,2) AS dec_val,
+          TIMESTAMP_NS '2024-06-15 14:30:00.123456789' AS ts_ns_val,
+          [1, 2, 3] AS list_val
+      `);
+
+      const result = await stmt.run();
+      expect(result[0].dec_val).toBe('123.45');
+      expect(result[0].ts_ns_val).toBe('2024-06-15 14:30:00.123456789');
+      expect(result[0].list_val).toBe('[1, 2, 3]');
+
+      stmt.close();
+    });
   });
 
   describe('execute()', () => {

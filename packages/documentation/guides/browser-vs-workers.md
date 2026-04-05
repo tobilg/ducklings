@@ -15,7 +15,7 @@ Ducklings provides two packages optimized for different JavaScript runtime envir
 | **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) |
 | **WASM size** | ~6.3 MiB | ~9.7 MiB |
 | **HTTP support** | Via httpfs extension | Native async fetch() |
-| **JSON extension** | Default build: No | Default build: No |
+| **JSON extension** | Not bundled | Not bundled |
 | **Threading** | Offloaded to Web Worker | Single-threaded |
 
 ## When to Use @ducklings/browser

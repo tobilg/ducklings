@@ -69,13 +69,33 @@ describe('Data Types (Async)', () => {
 
     it('should handle HUGEINT', async () => {
       const result = await conn.query('SELECT 170141183460469231731687303715884105727::HUGEINT AS val');
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('170141183460469231731687303715884105727');
+    });
+
+    it('should return safe HUGEINT values as numbers', async () => {
+      const result = await conn.query('SELECT 42::HUGEINT AS val');
+      expect(result[0].val).toBe(42);
+    });
+
+    it('should return safe sums of INTEGER as numbers even when DuckDB promotes them to HUGEINT', async () => {
+      const result = await conn.query(
+        'SELECT typeof(sum(i::INTEGER)) AS type_name, sum(i::INTEGER) AS val FROM range(3) tbl(i)',
+      );
+      expect(result[0].type_name).toBe('HUGEINT');
+      expect(result[0].val).toBe(3);
+    });
+
+    it('should return safe sums of BIGINT as numbers even when DuckDB promotes them to HUGEINT', async () => {
+      const result = await conn.query(
+        'SELECT typeof(sum(i::BIGINT)) AS type_name, sum(i::BIGINT) AS val FROM range(3) tbl(i)',
+      );
+      expect(result[0].type_name).toBe('HUGEINT');
+      expect(result[0].val).toBe(3);
     });
 
     it('should handle DECIMAL', async () => {
       const result = await conn.query('SELECT 123.45::DECIMAL(10,2) AS val');
-      // DECIMAL may be returned as string or number
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('123.45');
     });
   });
 
@@ -105,111 +125,113 @@ describe('Data Types (Async)', () => {
   describe('Binary types', () => {
     it('should handle BLOB', async () => {
       const result = await conn.query("SELECT '\\x48454C4C4F'::BLOB AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('H454C4C4F');
     });
 
     it('should handle empty BLOB', async () => {
       const result = await conn.query("SELECT ''::BLOB AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('');
     });
   });
 
   describe('Date/Time types', () => {
     it('should handle DATE', async () => {
       const result = await conn.query("SELECT DATE '2024-06-15' AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('2024-06-15');
     });
 
     it('should handle TIME', async () => {
-      const result = await conn.query("SELECT TIME '14:30:00' AS val");
-      expect(result[0].val).toBeDefined();
+      const result = await conn.query("SELECT TIME '14:30:00.123456' AS val");
+      expect(result[0].val).toBe('14:30:00.123456');
     });
 
     it('should handle TIMESTAMP', async () => {
-      const result = await conn.query("SELECT TIMESTAMP '2024-06-15 14:30:00' AS val");
-      expect(result[0].val).toBeDefined();
+      const result = await conn.query("SELECT TIMESTAMP '2024-06-15 14:30:00.123456' AS val");
+      expect(result[0].val).toBe('2024-06-15 14:30:00.123456');
     });
 
     it('should handle TIMESTAMP_S', async () => {
       const result = await conn.query("SELECT TIMESTAMP_S '2024-06-15 14:30:00' AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('2024-06-15 14:30:00');
     });
 
     it('should handle TIMESTAMP_MS', async () => {
       const result = await conn.query("SELECT TIMESTAMP_MS '2024-06-15 14:30:00.123' AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('2024-06-15 14:30:00.123');
     });
 
     it('should handle TIMESTAMP_NS', async () => {
       const result = await conn.query("SELECT TIMESTAMP_NS '2024-06-15 14:30:00.123456789' AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('2024-06-15 14:30:00.123456789');
     });
 
     it('should handle INTERVAL', async () => {
-      const result = await conn.query("SELECT INTERVAL '1 year 2 months 3 days' AS val");
-      expect(result[0].val).toBeDefined();
+      const result = await conn.query(
+        "SELECT INTERVAL '1 year 2 months 3 days 4 hours 5 minutes 6.789 seconds' AS val",
+      );
+      expect(result[0].val).toBe('1 year 2 months 3 days 04:05:06.789');
     });
 
     it('should handle TIMESTAMP WITH TIME ZONE', async () => {
-      const result = await conn.query("SELECT TIMESTAMPTZ '2024-06-15 14:30:00+00' AS val");
-      expect(result[0].val).toBeDefined();
+      const result = await conn.query(
+        "SELECT TIMESTAMPTZ '2024-06-15 14:30:00.123456+00' AS val",
+      );
+      expect(result[0].val).toBe('2024-06-15 14:30:00.123456+00');
     });
 
     it('should handle TIME WITH TIME ZONE', async () => {
-      const result = await conn.query("SELECT TIMETZ '14:30:00+00' AS val");
-      expect(result[0].val).toBeDefined();
+      const result = await conn.query("SELECT TIMETZ '14:30:00.123456+02:30' AS val");
+      expect(result[0].val).toBe('14:30:00.123456+02:30');
     });
   });
 
   describe('Complex types', () => {
     it('should handle LIST', async () => {
       const result = await conn.query('SELECT [1, 2, 3] AS val');
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('[1, 2, 3]');
     });
 
     it('should handle nested LIST', async () => {
       const result = await conn.query('SELECT [[1, 2], [3, 4]] AS val');
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('[[1, 2], [3, 4]]');
     });
 
     it('should handle STRUCT', async () => {
       const result = await conn.query("SELECT {'name': 'Alice', 'age': 30} AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe("{'name': Alice, 'age': 30}");
     });
 
     it('should handle nested STRUCT', async () => {
       const result = await conn.query("SELECT {'person': {'name': 'Bob', 'age': 25}} AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe("{'person': {'name': Bob, 'age': 25}}");
     });
 
     it('should handle MAP', async () => {
       const result = await conn.query("SELECT MAP {'a': 1, 'b': 2} AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('{a=1, b=2}');
     });
 
     it('should handle ARRAY (fixed-size)', async () => {
       const result = await conn.query('SELECT [1, 2, 3]::INTEGER[3] AS val');
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('[1, 2, 3]');
     });
   });
 
   describe('Special types', () => {
     it('should handle UUID', async () => {
       const result = await conn.query("SELECT '550e8400-e29b-41d4-a716-446655440000'::UUID AS val");
-      // UUID support varies by build
-      expect(result[0]).toBeDefined();
+      expect(result[0].val).toBe('550e8400-e29b-41d4-a716-446655440000');
     });
 
     it('should handle BIT', async () => {
       const result = await conn.query("SELECT '10101010'::BIT AS val");
-      expect(result[0].val).toBeDefined();
+      expect(result[0].val).toBe('10101010');
     });
 
     it('should handle ENUM', async () => {
       await conn.query("CREATE TYPE mood AS ENUM ('happy', 'sad', 'neutral')");
       const result = await conn.query("SELECT 'happy'::mood AS val");
-      // ENUM values may be returned as strings or indices
-      expect(result[0]).toBeDefined();
+      expect(result[0].val).toBe('happy');
       await conn.query('DROP TYPE mood');
     });
 
