@@ -554,17 +554,41 @@ setup_build_dir() {
     mkdir -p "$DIST_DIR"
 }
 
+prepare_duckdb_extension_config_override() {
+    local override_file="${BUILD_DIR}/duckdb_extension_config.override.cmake"
+
+    if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
+        rm -f "${override_file}"
+        return
+    fi
+
+    cat > "${override_file}" << 'CMAKEEOF'
+duckdb_extension_load(json DONT_BUILD)
+CMAKEEOF
+
+    echo "${override_file}"
+}
+
 configure_duckdb() {
     log_info "Configuring DuckDB with Emscripten (with httpfs)..."
 
     cd "$BUILD_DIR"
 
-    # Use emcmake to configure CMake for Emscripten
-    # Note: We build httpfs statically, not as a loadable extension
-    # Extensions: parquet and core_functions are loaded by default in extension_config.cmake.
-    # This repo also loads JSON via deps/duckdb/extension/extension_config_local.cmake, so
-    # keep json explicit here as well and make the linker inputs match that static loader.
-    local BUILD_EXTS="json"
+    # Use emcmake to configure CMake for Emscripten.
+    # parquet and core_functions come from DuckDB's base extension config. When
+    # JSON is disabled for the bundled build, inject an override config so the
+    # repo-local extension_config_local.cmake cannot pull json back in.
+    local BUILD_EXTS=""
+    local SKIP_EXTS="jemalloc"
+    local EXTENSION_CONFIG_OVERRIDE=""
+
+    if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
+        BUILD_EXTS="json"
+    else
+        SKIP_EXTS="${SKIP_EXTS};json"
+        EXTENSION_CONFIG_OVERRIDE="$(prepare_duckdb_extension_config_override)"
+    fi
+
     emcmake cmake "$DUCKDB_SRC" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHELL=OFF \
@@ -572,7 +596,8 @@ configure_duckdb() {
         -DENABLE_SANITIZER=OFF \
         -DENABLE_UBSAN=OFF \
         -DBUILD_EXTENSIONS="${BUILD_EXTS}" \
-        -DSKIP_EXTENSIONS="jemalloc" \
+        -DDUCKDB_EXTENSION_CONFIGS="${EXTENSION_CONFIG_OVERRIDE}" \
+        -DSKIP_EXTENSIONS="${SKIP_EXTS}" \
         -DDUCKDB_EXPLICIT_PLATFORM=wasm_mvp \
         -DSMALLER_BINARY=TRUE \
         -DCMAKE_CXX_FLAGS="-Oz -DNDEBUG -DDUCKDB_NO_THREADS=1 -DDUCKDB_DISABLE_EXTENSION_LOAD=1 -sDISABLE_EXCEPTION_CATCHING=0" \

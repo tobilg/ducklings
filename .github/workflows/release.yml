@@ -20,6 +20,7 @@ on:
 env:
   EMSDK_VERSION: '4.0.22'
   NODE_VERSION: '22'
+  CF_PAGES_MAX_FILE_BYTES: '26214400'
 
 jobs:
   version:
@@ -93,17 +94,27 @@ jobs:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: 'emsdk-cache'
 
-      - name: Verify
-        run: emcc -v
-
-      - name: Install binaryen
-        run: sudo apt-get install -y binaryen
+      - name: Verify toolchain
+        run: |
+          which emcc
+          emcc -v
+          which wasm-opt
+          wasm-opt --version
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
       - name: Build browser WASM
         run: make duckdb-browser
+
+      - name: Report browser WASM size
+        run: |
+          SIZE=$(stat -c%s dist/duckdb.wasm)
+          LIMIT=${{ env.CF_PAGES_MAX_FILE_BYTES }}
+          echo "dist/duckdb.wasm: ${SIZE} bytes"
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "::warning::dist/duckdb.wasm is ${SIZE} bytes, exceeds Cloudflare Pages limit ${LIMIT}. Package publishing continues; the Pages deploy job enforces the limit on the final built asset."
+          fi
 
       - name: Upload browser WASM artifacts
         uses: actions/upload-artifact@v4
@@ -171,11 +182,12 @@ jobs:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: 'emsdk-cache'
 
-      - name: Verify
-        run: emcc -v
-
-      - name: Install binaryen
-        run: sudo apt-get install -y binaryen
+      - name: Verify toolchain
+        run: |
+          which emcc
+          emcc -v
+          which wasm-opt
+          wasm-opt --version
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -269,6 +281,22 @@ jobs:
 
       - name: Build example
         run: pnpm --filter @ducklings/example-browser build
+
+      - name: Check Pages browser asset size
+        run: |
+          LIMIT=${{ env.CF_PAGES_MAX_FILE_BYTES }}
+          WASM_FILE=$(find packages/example-browser/dist/assets -maxdepth 1 -type f -name 'duckdb-*.wasm' | head -n 1)
+          if [ -z "$WASM_FILE" ]; then
+            echo "::error::Could not find browser WASM asset in packages/example-browser/dist/assets"
+            find packages/example-browser/dist -maxdepth 2 -type f | sort
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$WASM_FILE")
+          echo "${WASM_FILE}: ${SIZE} bytes"
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "::error::${WASM_FILE} is ${SIZE} bytes, exceeds Cloudflare Pages limit ${LIMIT}"
+            exit 1
+          fi
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
