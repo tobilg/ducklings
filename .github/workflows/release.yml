@@ -94,6 +94,9 @@ jobs:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: 'emsdk-cache'
 
+      - name: Add Emscripten upstream tools to PATH
+        run: echo "$EMSDK/upstream/bin" >> "$GITHUB_PATH"
+
       - name: Verify toolchain
         run: |
           which emcc
@@ -181,6 +184,9 @@ jobs:
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: 'emsdk-cache'
+
+      - name: Add Emscripten upstream tools to PATH
+        run: echo "$EMSDK/upstream/bin" >> "$GITHUB_PATH"
 
       - name: Verify toolchain
         run: |
