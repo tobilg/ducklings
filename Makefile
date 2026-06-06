@@ -6,10 +6,10 @@ DIST_DIR := dist
 
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
-DUCKDB_VERSION := v1.5.2
-DUCKDB_HTTPFS_VERSION := b304dc6fb4439c363392c2473a07382daeb0a605
-DUCKDB_ICEBERG_VERSION := 66392d4732841ce030554c8bce2bcaa7ca692b43 #v1.5-variegata
-DUCKDB_AVRO_VERSION := a73b60d629a92146cfd71c210936144a971783bd #v1.5-variegata
+DUCKDB_VERSION := v1.5.3
+DUCKDB_HTTPFS_VERSION := 53c5b032f6c368cfcc1a1ac3819118e86d3286a6
+DUCKDB_ICEBERG_VERSION := v1.5-variegata
+DUCKDB_AVRO_VERSION := v1.5-variegata
 NANOARROW_VERSION := apache-arrow-nanoarrow-0.8.0
 VCPKG_BASELINE := 84bab45d415d22042bd0b9081aea57f362da3f35
 VERSION_SUFFIX := 
@@ -17,6 +17,20 @@ NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 define find_files
 $(strip $(shell if [ -d "$(1)" ]; then find "$(1)" -type f ! -path '*/.git/*' ! -path '* *' | sort; fi))
+endef
+
+define checkout_dependency_version
+cd $(1) && git fetch origin --tags && \
+	if git show-ref --verify --quiet "refs/remotes/origin/$(2)"; then \
+		if git show-ref --verify --quiet "refs/heads/$(2)"; then \
+			git checkout "$(2)"; \
+		else \
+			git checkout -b "$(2)" "origin/$(2)"; \
+		fi; \
+		git merge --ff-only "origin/$(2)"; \
+	else \
+		git checkout "$(2)"; \
+	fi
 endef
 
 SYNC_VERSIONS_STAMP := $(BUILD_DIR)/.sync-versions.stamp
@@ -70,13 +84,18 @@ deps:
 	git submodule init
 	$(MAKE) pin-versions
 
-# Pin all dependencies to exact versions for reproducible builds
+# Pin all dependencies to configured refs. Branch refs fast-forward to origin.
 pin-versions:
-	cd deps/duckdb && git fetch --tags && git checkout $(DUCKDB_VERSION)
-	cd deps/duckdb-httpfs && git fetch origin && git checkout $(DUCKDB_HTTPFS_VERSION)
-	cd deps/duckdb-iceberg && git fetch --tags && git checkout $(DUCKDB_ICEBERG_VERSION)
-	cd deps/duckdb-avro && git fetch origin && git checkout $(DUCKDB_AVRO_VERSION)
-	cd deps/nanoarrow && git fetch --tags && git checkout $(NANOARROW_VERSION)
+	@echo "Pinning deps/duckdb to $(DUCKDB_VERSION)"
+	@$(call checkout_dependency_version,deps/duckdb,$(DUCKDB_VERSION))
+	@echo "Pinning deps/duckdb-httpfs to $(DUCKDB_HTTPFS_VERSION)"
+	@$(call checkout_dependency_version,deps/duckdb-httpfs,$(DUCKDB_HTTPFS_VERSION))
+	@echo "Pinning deps/duckdb-iceberg to $(DUCKDB_ICEBERG_VERSION)"
+	@$(call checkout_dependency_version,deps/duckdb-iceberg,$(DUCKDB_ICEBERG_VERSION))
+	@echo "Pinning deps/duckdb-avro to $(DUCKDB_AVRO_VERSION)"
+	@$(call checkout_dependency_version,deps/duckdb-avro,$(DUCKDB_AVRO_VERSION))
+	@echo "Pinning deps/nanoarrow to $(NANOARROW_VERSION)"
+	@$(call checkout_dependency_version,deps/nanoarrow,$(NANOARROW_VERSION))
 
 # Sync npm package versions to match DUCKDB_VERSION
 sync-versions: $(SYNC_VERSIONS_STAMP)

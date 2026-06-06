@@ -1,23 +1,21 @@
 diff --git a/src/include/duckdb/main/database.hpp b/src/include/duckdb/main/database.hpp
-index 83795046ad..f84685141c 100644
 --- a/src/include/duckdb/main/database.hpp
 +++ b/src/include/duckdb/main/database.hpp
-@@ -18,6 +18,10 @@
+@@ -16,6 +16,10 @@
  
  namespace duckdb {
- 
+ class LocalDatabaseFileSystem;
++
 +extern bool preloaded_httpfs;
 +extern bool preloaded_avro;
 +extern bool preloaded_iceberg;
-+
+ 
  class BufferManager;
  class DatabaseManager;
- class StorageManager;
 diff --git a/src/main/database.cpp b/src/main/database.cpp
-index 04673dd163..fcd410b10e 100644
 --- a/src/main/database.cpp
 +++ b/src/main/database.cpp
-@@ -510,6 +510,16 @@ idx_t DuckDB::NumberOfThreads() {
+@@ -552,6 +552,16 @@ idx_t DuckDB::NumberOfThreads() {
  }
  
  bool DatabaseInstance::ExtensionIsLoaded(const string &name) {

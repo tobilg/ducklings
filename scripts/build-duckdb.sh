@@ -452,6 +452,7 @@ compile_iceberg_source_if_needed() {
         -I"${DUCKDB_SRC}/src/include" \
         -I"${BUILD_DIR}/src/include" \
         -I"${DUCKDB_SRC}/third_party/yyjson/include" \
+        -I"${DUCKDB_SRC}/third_party/fmt/include" \
         -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
         -I"${DUCKDB_SRC}/third_party/re2" \
         -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
@@ -640,7 +641,7 @@ build_httpfs() {
     mkdir -p "${BUILD_DIR}/httpfs"
     cd "${BUILD_DIR}/httpfs"
 
-    # Compile httpfs source files (WASM version - no curl/openssl)
+    # Compile httpfs source files for the WASM HTTP client.
     local -a HTTPFS_SOURCES=(
         "hffs.cpp"
         "s3fs.cpp"
@@ -671,9 +672,11 @@ build_httpfs() {
             -I"${DUCKDB_SRC}/src/include" \
             -I"${HTTPFS_SRC}/src/include" \
             -I"${BUILD_DIR}/src/include" \
+            -I"${DUCKDB_SRC}/third_party/fmt/include" \
             -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
             -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
-            -I"${DUCKDB_SRC}/third_party/re2"
+            -I"${DUCKDB_SRC}/third_party/re2" \
+            -I"${VCPKG_INSTALLED}/include"
         HTTPFS_OBJS+=("${BUILD_DIR}/httpfs/${obj}")
     done
 
@@ -700,6 +703,7 @@ build_http_wasm_client() {
         -DDUCKDB_NO_THREADS=1 \
         -I"${DUCKDB_SRC}/src/include" \
         -I"${BUILD_DIR}/src/include" \
+        -I"${DUCKDB_SRC}/third_party/fmt/include" \
         -I"${HTTPFS_SRC}/src/include"
 
     # httpfs init is now in main.cpp, so just create library with http_wasm.o
@@ -783,7 +787,8 @@ build_arrow_ipc_insert() {
         -DNDEBUG \
         -I"${BUILD_DIR}/nanoarrow" \
         -I"${DUCKDB_SRC}/src/include" \
-        -I"${BUILD_DIR}/src/include"
+        -I"${BUILD_DIR}/src/include" \
+        -I"${DUCKDB_SRC}/third_party/fmt/include"
 
     archive_if_needed "${BUILD_DIR}/arrow_ipc_insert/libarrow_ipc_insert.a" \
         "${BUILD_DIR}/arrow_ipc_insert/arrow_ipc_insert.o"
@@ -886,6 +891,7 @@ build_avro() {
             -I"${AVRO_SRC}/src/include" \
             -I"${DUCKDB_SRC}/src/include" \
             -I"${BUILD_DIR}/src/include" \
+            -I"${DUCKDB_SRC}/third_party/fmt/include" \
             -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
             -I"${DUCKDB_SRC}/third_party/yyjson/include" \
             -I"${VCPKG_INSTALLED}/include"
@@ -1347,6 +1353,7 @@ MAINEOF
         -I"${HTTPFS_SRC}/src/include" \
         -I"${HTTP_WASM_SRC}" \
         -I"${BUILD_DIR}/codegen/include" \
+        -I"${DUCKDB_SRC}/third_party/fmt/include" \
         -I"${DUCKDB_SRC}/extension/core_functions/include" \
         -I"${DUCKDB_SRC}/extension/json/include" \
         -I"${DUCKDB_SRC}/extension/parquet/include" \
