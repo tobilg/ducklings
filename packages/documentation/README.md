@@ -7,11 +7,12 @@ A minimal DuckDB WASM binding for browsers and Cloudflare Workers.
 | Package | Environment | API Style |
 |---------|-------------|-----------|
 | [@ducklings/browser](https://www.npmjs.com/package/@ducklings/browser) | Browsers | Asynchronous (Web Worker) |
-| [@ducklings/workers](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers* | Asynchronous (Asyncify) |
+| [@ducklings/workers](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers with Iceberg* | Asynchronous (Asyncify) |
+| [@ducklings/workers-ducklake](https://www.npmjs.com/package/@ducklings/workers-ducklake) | Cloudflare Workers with DuckLake* | Asynchronous (Asyncify) |
 
-Both packages provide the same async API, but use different mechanisms under the hood.
+All packages provide the same async API, but use different mechanisms and bundled extensions under the hood.
 
-> *The workers package requires a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) due to WASM size (~9.7MB). Free plan limit is 3MB, paid plans support up to 10MB.
+> *The workers packages require a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) because the bundled WASM is close to Cloudflare's compressed Worker size limit. Use `wrangler deploy --dry-run --outdir bundled` to verify the final gzip size.
 
 ## Quick Start
 
@@ -23,6 +24,9 @@ npm install @ducklings/browser
 
 # For Cloudflare Workers
 npm install @ducklings/workers
+
+# For Cloudflare Workers with DuckLake
+npm install @ducklings/workers-ducklake
 ```
 
 ### Browser Usage
@@ -82,7 +86,7 @@ const results = await stmt.run();
 
 ## Features
 
-- **Minimal footprint**: ~5.7MB (browser) / ~9.7MB (workers) gzipped
+- **Minimal footprint**: ~6.3 MiB (browser) / near Cloudflare Workers paid gzip limit (workers)
 - **TypeScript**: Full type definitions included
 - **Prepared statements**: Secure parameterized queries
 - **Streaming results**: Memory-efficient chunked processing
@@ -98,3 +102,4 @@ const results = await stmt.run();
 - [GitHub Repository](https://github.com/tobilg/ducklings)
 - [@ducklings/browser on npm](https://www.npmjs.com/package/@ducklings/browser)
 - [@ducklings/workers on npm](https://www.npmjs.com/package/@ducklings/workers)
+- [@ducklings/workers-ducklake on npm](https://www.npmjs.com/package/@ducklings/workers-ducklake)

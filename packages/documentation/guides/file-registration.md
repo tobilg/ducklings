@@ -122,7 +122,7 @@ DuckDB can read many formats from registered files:
 | CSV | `read_csv()` | `SELECT * FROM read_csv('data.csv')` |
 | Parquet | Direct path | `SELECT * FROM 'data.parquet'` |
 
-JSON and NDJSON readers require a custom build with DuckDB's `json` extension enabled. The standard `@ducklings/browser` and `@ducklings/workers` packages omit that extension to stay within Cloudflare deployment size limits.
+JSON and NDJSON readers require a custom build with DuckDB's `json` extension enabled. The standard `@ducklings/browser`, `@ducklings/workers`, and `@ducklings/workers-ducklake` packages omit that extension to stay within Cloudflare deployment size limits.
 
 ## Complete Example
 

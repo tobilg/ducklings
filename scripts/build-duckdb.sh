@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build DuckDB to WebAssembly using Emscripten
-# Includes httpfs, avro, and iceberg extensions statically with WASM HTTP client
+# Includes httpfs and selected lakehouse extensions statically with WASM HTTP client
 # Supports:
 #   - browser (default): Optimized for size, uses synchronous XMLHttpRequest
-#   - workers build: Generic/testable workers wrapper
+#   - workers build: Generic/testable workers wrapper (Iceberg by default)
 #   - workers release: Production Cloudflare Workers wrapper
 #   - workers local-debug: Wrangler/Miniflare-friendly wrapper + debug symbols/assertions
 set -euo pipefail
@@ -12,46 +12,99 @@ set -euo pipefail
 TARGET="${1:-browser}"
 LINK_ONLY=false
 WORKERS_PROFILE="${DUCKLINGS_WORKERS_PROFILE:-}"
+WORKERS_FLAVOR="${DUCKLINGS_WORKERS_FLAVOR:-iceberg}"
 
 case "${TARGET}" in
     browser)
+        WORKERS_FLAVOR="iceberg"
         ;;
-    workers)
+    workers|workers-iceberg)
+        TARGET="workers"
         WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
+        WORKERS_FLAVOR="iceberg"
         ;;
-    link-workers)
+    workers-ducklake)
+        TARGET="workers"
+        WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
+        WORKERS_FLAVOR="ducklake"
+        ;;
+    link-workers|link-workers-iceberg)
         TARGET="workers"
         LINK_ONLY=true
         WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
+        WORKERS_FLAVOR="iceberg"
         ;;
-    release-workers)
+    link-workers-ducklake)
+        TARGET="workers"
+        LINK_ONLY=true
+        WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
+        WORKERS_FLAVOR="ducklake"
+        ;;
+    release-workers|release-workers-iceberg)
         TARGET="workers"
         WORKERS_PROFILE="release"
+        WORKERS_FLAVOR="iceberg"
         ;;
-    link-release-workers)
+    release-workers-ducklake)
+        TARGET="workers"
+        WORKERS_PROFILE="release"
+        WORKERS_FLAVOR="ducklake"
+        ;;
+    link-release-workers|link-release-workers-iceberg)
         TARGET="workers"
         LINK_ONLY=true
         WORKERS_PROFILE="release"
+        WORKERS_FLAVOR="iceberg"
         ;;
-    debug-workers)
+    link-release-workers-ducklake)
+        TARGET="workers"
+        LINK_ONLY=true
+        WORKERS_PROFILE="release"
+        WORKERS_FLAVOR="ducklake"
+        ;;
+    debug-workers|debug-workers-iceberg)
         TARGET="workers"
         WORKERS_PROFILE="local-debug"
+        WORKERS_FLAVOR="iceberg"
         ;;
-    link-debug-workers)
+    debug-workers-ducklake)
+        TARGET="workers"
+        WORKERS_PROFILE="local-debug"
+        WORKERS_FLAVOR="ducklake"
+        ;;
+    link-debug-workers|link-debug-workers-iceberg)
         TARGET="workers"
         LINK_ONLY=true
         WORKERS_PROFILE="local-debug"
+        WORKERS_FLAVOR="iceberg"
+        ;;
+    link-debug-workers-ducklake)
+        TARGET="workers"
+        LINK_ONLY=true
+        WORKERS_PROFILE="local-debug"
+        WORKERS_FLAVOR="ducklake"
         ;;
     *)
-        echo "Usage: $0 [browser|workers|link-workers|release-workers|link-release-workers|debug-workers|link-debug-workers]"
+        echo "Usage: $0 [browser|workers|workers-ducklake|link-workers|link-workers-ducklake|release-workers|release-workers-ducklake|debug-workers|debug-workers-ducklake]"
         echo "  browser (default): Browser build with sync XMLHttpRequest"
-        echo "  workers: Workers build optimized for Cloudflare deployment size"
-        echo "  link-workers: Link-only workers build"
-        echo "  release-workers: Production workers build"
-        echo "  link-release-workers: Link-only production workers build"
-        echo "  debug-workers: Local workers debug build with symbols/assertions"
-        echo "  link-debug-workers: Link-only local workers debug build"
+        echo "  workers: Iceberg workers build optimized for Cloudflare deployment size"
+        echo "  workers-ducklake: DuckLake workers build optimized for Cloudflare deployment size"
+        echo "  link-workers/link-workers-ducklake: Link-only workers builds"
+        echo "  release-workers/release-workers-ducklake: Production workers builds"
+        echo "  debug-workers/debug-workers-ducklake: Local workers debug builds with symbols/assertions"
         echo "  Optional: set DUCKLINGS_WORKERS_PROFILE=build|release|local-debug"
+        echo "  Optional: set DUCKLINGS_WORKERS_FLAVOR=iceberg|ducklake for workers targets"
+        exit 1
+        ;;
+esac
+
+EXTENSION_FLAVOR="${WORKERS_FLAVOR}"
+case "${EXTENSION_FLAVOR}" in
+    iceberg|ducklake)
+        ;;
+    *)
+        echo "[ERROR] Unknown workers flavor: ${EXTENSION_FLAVOR}"
+        echo "Supported values: iceberg, ducklake"
         exit 1
         ;;
 esac
@@ -63,13 +116,21 @@ if [ "$TARGET" = "workers" ]; then
             WORKERS_WASM_DEBUG_DEFAULT=0
             JSON_EXTENSION_ENABLED=0
             WORKERS_RUN_WASM_OPT=1
-            OUTPUT_SUFFIX="-workers"
+            if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+                OUTPUT_SUFFIX="-workers-ducklake"
+            else
+                OUTPUT_SUFFIX="-workers"
+            fi
             ;;
         local-debug)
             WORKERS_WASM_DEBUG_DEFAULT=1
             JSON_EXTENSION_ENABLED=1
             WORKERS_RUN_WASM_OPT=0
-            OUTPUT_SUFFIX="-workers"
+            if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+                OUTPUT_SUFFIX="-workers-ducklake"
+            else
+                OUTPUT_SUFFIX="-workers"
+            fi
             ;;
         *)
             echo "[ERROR] Unknown workers profile: ${WORKERS_PROFILE}"
@@ -197,7 +258,16 @@ if [ "$TARGET" = "workers" ]; then
     ASYNCIFY_ADD+="'duckdb::IcebergMultiFileList*',"
     ASYNCIFY_ADD+="'duckdb::manifest_list::ManifestListReader*',"
     ASYNCIFY_ADD+="'duckdb::manifest_file::ManifestReader*',"
-    ASYNCIFY_ADD+="'duckdb::IcebergTransaction*'"
+    ASYNCIFY_ADD+="'duckdb::IcebergTransaction*',"
+    # DuckLake storage/catalog/metadata paths
+    ASYNCIFY_ADD+="'duckdb::DuckLake*',"
+    ASYNCIFY_ADD+="'duckdb::Ducklake*',"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeFunctions*',"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeMetadataManager*',"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeTransaction*',"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeStorage*',"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeCatalog*',"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeMultiFile*'"
     ASYNCIFY_ADD+="]"
     # Default Asyncify + selective REMOVE. Only remove third-party libraries
     # that are self-contained and never called from the async path.
@@ -336,6 +406,7 @@ DUCKDB_SRC="${PROJECT_ROOT}/deps/duckdb"
 HTTPFS_SRC="${PROJECT_ROOT}/deps/duckdb-httpfs"
 ICEBERG_SRC="${PROJECT_ROOT}/deps/duckdb-iceberg"
 AVRO_SRC="${PROJECT_ROOT}/deps/duckdb-avro"
+DUCKLAKE_SRC="${PROJECT_ROOT}/deps/ducklake"
 NANOARROW_SRC="${PROJECT_ROOT}/deps/nanoarrow"
 HTTP_WASM_SRC="${PROJECT_ROOT}/src/http"
 ARROW_IPC_SRC="${PROJECT_ROOT}/src/arrow"
@@ -347,6 +418,7 @@ VCPKG_BASELINE="84bab45d415d22042bd0b9081aea57f362da3f35"
 # Number of parallel jobs
 CORES=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 ICEBERG_CORES="${DUCKLINGS_ICEBERG_JOBS:-$CORES}"
+DUCKLAKE_CORES="${DUCKLINGS_DUCKLAKE_JOBS:-$CORES}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -459,6 +531,34 @@ compile_iceberg_source_if_needed() {
         -I"${VCPKG_INSTALLED}/include"
 }
 
+compile_ducklake_source_if_needed() {
+    local src_file="$1"
+    local rel_path="${src_file#${DUCKLAKE_SRC}/src/}"
+    local obj_base="${rel_path//\//_}"
+    local obj_path=""
+    local dep_path=""
+
+    obj_base="${obj_base%.cpp}"
+    obj_path="${BUILD_DIR}/ducklake/${obj_base}.o"
+    dep_path="${BUILD_DIR}/ducklake/${obj_base}.d"
+
+    compile_source_if_needed "${rel_path}" "${src_file}" "${obj_path}" "${dep_path}" \
+        -Oz \
+        -std=c++17 \
+        -DNDEBUG \
+        -DDUCKDB_NO_THREADS=1 \
+        -I"${DUCKLAKE_SRC}/src/include" \
+        -I"${DUCKDB_SRC}/src/include" \
+        -I"${BUILD_DIR}/src/include" \
+        -I"${DUCKDB_SRC}/third_party/yyjson/include" \
+        -I"${DUCKDB_SRC}/third_party/fmt/include" \
+        -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
+        -I"${DUCKDB_SRC}/third_party/re2" \
+        -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
+        -I"${DUCKDB_SRC}/extension/parquet/include" \
+        -I"${VCPKG_INSTALLED}/include"
+}
+
 check_emscripten() {
     if ! command -v emcc &> /dev/null; then
         log_error "Emscripten (emcc) not found in PATH"
@@ -482,19 +582,30 @@ check_duckdb_source() {
     fi
     log_info "HTTPFS source found at $HTTPFS_SRC"
 
-    if [ ! -d "$ICEBERG_SRC" ]; then
-        log_error "Iceberg extension source not found at $ICEBERG_SRC"
-        log_info "Run 'make deps' to initialize submodules"
-        exit 1
-    fi
-    log_info "Iceberg source found at $ICEBERG_SRC"
+    if [ "${EXTENSION_FLAVOR}" = "iceberg" ]; then
+        if [ ! -d "$ICEBERG_SRC" ]; then
+            log_error "Iceberg extension source not found at $ICEBERG_SRC"
+            log_info "Run 'make deps' to initialize submodules"
+            exit 1
+        fi
+        log_info "Iceberg source found at $ICEBERG_SRC"
 
-    if [ ! -d "$AVRO_SRC" ]; then
-        log_error "Avro extension source not found at $AVRO_SRC"
-        log_info "Run 'make deps' to initialize submodules"
-        exit 1
+        if [ ! -d "$AVRO_SRC" ]; then
+            log_error "Avro extension source not found at $AVRO_SRC"
+            log_info "Run 'make deps' to initialize submodules"
+            exit 1
+        fi
+        log_info "Avro source found at $AVRO_SRC"
     fi
-    log_info "Avro source found at $AVRO_SRC"
+
+    if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+        if [ ! -d "$DUCKLAKE_SRC" ]; then
+            log_error "DuckLake extension source not found at $DUCKLAKE_SRC"
+            log_info "Run 'make deps' to initialize submodules"
+            exit 1
+        fi
+        log_info "DuckLake source found at $DUCKLAKE_SRC"
+    fi
 }
 
 apply_patches() {
@@ -543,8 +654,13 @@ apply_patches() {
 
     apply_patch_series "$DUCKDB_SRC" "${PATCH_ROOT}/duckdb" "duckdb"
     apply_patch_series "$HTTPFS_SRC" "${PATCH_ROOT}/duckdb-httpfs" "duckdb-httpfs"
-    apply_patch_series "$AVRO_SRC" "${PATCH_ROOT}/duckdb-avro" "duckdb-avro"
-    apply_patch_series "$ICEBERG_SRC" "${PATCH_ROOT}/duckdb-iceberg" "duckdb-iceberg"
+    if [ "${EXTENSION_FLAVOR}" = "iceberg" ]; then
+        apply_patch_series "$AVRO_SRC" "${PATCH_ROOT}/duckdb-avro" "duckdb-avro"
+        apply_patch_series "$ICEBERG_SRC" "${PATCH_ROOT}/duckdb-iceberg" "duckdb-iceberg"
+    fi
+    if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+        apply_patch_series "$DUCKLAKE_SRC" "${PATCH_ROOT}/ducklake" "ducklake"
+    fi
 
     log_info "Submodule patches ready!"
 }
@@ -572,6 +688,8 @@ CMAKEEOF
 
 configure_duckdb() {
     log_info "Configuring DuckDB with Emscripten (with httpfs)..."
+    log_info "  Extension flavor: ${EXTENSION_FLAVOR}"
+    log_info "  SMALLER_BINARY=TRUE"
 
     cd "$BUILD_DIR"
 
@@ -959,6 +1077,58 @@ build_iceberg() {
     log_info "iceberg extension built!"
 }
 
+build_ducklake() {
+    log_info "Building ducklake extension..."
+
+    mkdir -p "${BUILD_DIR}/ducklake"
+    cd "${BUILD_DIR}/ducklake"
+
+    local DUCKLAKE_CPP_FILES
+    DUCKLAKE_CPP_FILES=$(mktemp "${TMPDIR:-/tmp}/ducklings-ducklake-srcs.XXXXXX")
+    find "${DUCKLAKE_SRC}/src" -name "*.cpp" | sort > "${DUCKLAKE_CPP_FILES}"
+
+    local total
+    total=$(wc -l < "${DUCKLAKE_CPP_FILES}" | tr -d ' ')
+    if [ "${total}" = "0" ]; then
+        rm -f "${DUCKLAKE_CPP_FILES}"
+        log_error "No DuckLake source files found"
+        exit 1
+    fi
+
+    if ! [[ "${DUCKLAKE_CORES}" =~ ^[1-9][0-9]*$ ]]; then
+        rm -f "${DUCKLAKE_CPP_FILES}"
+        log_error "DUCKLINGS_DUCKLAKE_JOBS must be a positive integer (got: ${DUCKLAKE_CORES})"
+        exit 1
+    fi
+
+    local -a DUCKLAKE_OBJS=()
+    local src_file=""
+    local rel_path=""
+    local obj_name=""
+    while IFS= read -r src_file; do
+        rel_path="${src_file#${DUCKLAKE_SRC}/src/}"
+        obj_name="${rel_path//\//_}"
+        obj_name="${obj_name%.cpp}.o"
+        DUCKLAKE_OBJS+=("${BUILD_DIR}/ducklake/${obj_name}")
+    done < "${DUCKLAKE_CPP_FILES}"
+
+    log_info "  Checking ${total} source files with ${DUCKLAKE_CORES} parallel jobs..."
+
+    export BUILD_DIR DUCKLAKE_SRC DUCKDB_SRC VCPKG_INSTALLED GREEN NC
+    export -f log_info depfile_needs_rebuild compile_source_if_needed compile_ducklake_source_if_needed
+    xargs -P "${DUCKLAKE_CORES}" -I{} bash -c '
+        set -euo pipefail
+        compile_ducklake_source_if_needed "$1"
+    ' _ {} < "${DUCKLAKE_CPP_FILES}"
+
+    rm -f "${DUCKLAKE_CPP_FILES}"
+
+    archive_if_needed "${BUILD_DIR}/ducklake/libducklake_extension.a" "${DUCKLAKE_OBJS[@]}"
+
+    cd "${PROJECT_ROOT}"
+    log_info "ducklake extension built!"
+}
+
 prepare_generated_extension_loader() {
     local generated_loader="${BUILD_DIR}/codegen/src/generated_extension_loader.cpp"
 
@@ -1057,14 +1227,19 @@ find_duckdb_libraries() {
         LIBS="${LIBS} ${BUILD_DIR}/arrow_ipc_insert/libarrow_ipc_insert.a"
     fi
 
-    # Avro extension
-    if [ -f "${BUILD_DIR}/avro/libavro_extension.a" ]; then
+    # Avro extension (Iceberg flavor)
+    if [ "${EXTENSION_FLAVOR}" = "iceberg" ] && [ -f "${BUILD_DIR}/avro/libavro_extension.a" ]; then
         LIBS="${LIBS} ${BUILD_DIR}/avro/libavro_extension.a"
     fi
 
     # Iceberg extension
-    if [ -f "${BUILD_DIR}/iceberg/libiceberg_extension.a" ]; then
+    if [ "${EXTENSION_FLAVOR}" = "iceberg" ] && [ -f "${BUILD_DIR}/iceberg/libiceberg_extension.a" ]; then
         LIBS="${LIBS} ${BUILD_DIR}/iceberg/libiceberg_extension.a"
+    fi
+
+    # DuckLake extension
+    if [ "${EXTENSION_FLAVOR}" = "ducklake" ] && [ -f "${BUILD_DIR}/ducklake/libducklake_extension.a" ]; then
+        LIBS="${LIBS} ${BUILD_DIR}/ducklake/libducklake_extension.a"
     fi
 
     # vcpkg libraries (link order matters — C++ before C, dependents before dependencies)
@@ -1078,11 +1253,19 @@ find_duckdb_libraries() {
         libaws-c-event-stream.a libaws-c-sdkutils.a \
         libaws-c-compression.a libaws-c-common.a libaws-checksums.a \
         libs2n.a libssl.a libcrypto.a libcurl.a \
-        libavro.a libjansson.a liblzma.a libsnappy.a libz.a; do
+        liblzma.a libsnappy.a libz.a; do
         if [ -f "${VCPKG_INSTALLED}/lib/${lib}" ]; then
             LIBS="${LIBS} ${VCPKG_INSTALLED}/lib/${lib}"
         fi
     done
+
+    if [ "${EXTENSION_FLAVOR}" = "iceberg" ]; then
+        for lib in libavro.a libjansson.a; do
+            if [ -f "${VCPKG_INSTALLED}/lib/${lib}" ]; then
+                LIBS="${LIBS} ${VCPKG_INSTALLED}/lib/${lib}"
+            fi
+        done
+    fi
 
     echo "${LIBS}"
 }
@@ -1095,9 +1278,35 @@ link_wasm_module() {
     GENERATED_EXTENSION_LOADER="$(prepare_generated_extension_loader)"
     log_info "Using libraries: $DUCKDB_LIBS"
 
+    local EXTENSION_INCLUDES=""
+    local PRELOADED_FLAGS=""
+    local EXTENSION_LOADS=""
+    local EXTENSION_LOAD_COMMENT=""
+    if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+        EXTENSION_INCLUDES='#include "ducklake_extension.hpp"'
+        PRELOADED_FLAGS='bool preloaded_httpfs = true;
+bool preloaded_avro = false;
+bool preloaded_iceberg = false;
+bool preloaded_ducklake = true;'
+        EXTENSION_LOADS='duckdb_instance.LoadStaticExtension<duckdb::HttpfsExtension>();
+        duckdb_instance.LoadStaticExtension<duckdb::DucklakeExtension>();'
+        EXTENSION_LOAD_COMMENT='// Loading order: httpfs (sets up HTTPWasmUtil) -> ducklake'
+    else
+        EXTENSION_INCLUDES='#include "avro_extension.hpp"
+#include "iceberg_extension.hpp"'
+        PRELOADED_FLAGS='bool preloaded_httpfs = true;
+bool preloaded_avro = true;
+bool preloaded_iceberg = true;
+bool preloaded_ducklake = false;'
+        EXTENSION_LOADS='duckdb_instance.LoadStaticExtension<duckdb::HttpfsExtension>();
+        duckdb_instance.LoadStaticExtension<duckdb::AvroExtension>();
+        duckdb_instance.LoadStaticExtension<duckdb::IcebergExtension>();'
+        EXTENSION_LOAD_COMMENT='// Loading order: httpfs (sets up HTTPWasmUtil) -> avro -> iceberg'
+    fi
+
     # Create main.cpp with proper extension initialization
     # This is compiled as part of the final link step, so it can access DuckDB internals
-    cat > "${BUILD_DIR}/main.cpp" << 'MAINEOF'
+    cat > "${BUILD_DIR}/main.cpp" << MAINEOF
 // Entry point for DuckDB WASM with statically linked extensions
 #include "duckdb.hpp"
 #include "duckdb/common/types/blob.hpp"
@@ -1108,17 +1317,14 @@ link_wasm_module() {
 #include "httpfs.hpp"
 #include "httpfs_extension.hpp"
 #include "http_wasm.hpp"
-#include "avro_extension.hpp"
-#include "iceberg_extension.hpp"
+${EXTENSION_INCLUDES}
 
 namespace duckdb {
 
 // Mark extensions as preloaded so DuckDB doesn't try to load them dynamically
 // All must be true before duckdb_open — DuckDB's startup may query ExtensionIsLoaded
 // and attempt LoadExternalExtension if it returns false (which throws with DUCKDB_DISABLE_EXTENSION_LOAD)
-bool preloaded_httpfs = true;
-bool preloaded_avro = true;
-bool preloaded_iceberg = true;
+${PRELOADED_FLAGS}
 
 } // namespace duckdb
 
@@ -1151,7 +1357,7 @@ const char* duckdb_wasm_init_error() {
 // Initialize extensions for WASM - must be called after duckdb_open
 // Note: json, parquet, core_functions are loaded automatically by DuckDB's
 // generated extension loader (LoadAllExtensions) during database startup.
-// Loading order: httpfs (sets up HTTPWasmUtil) → avro → iceberg
+${EXTENSION_LOAD_COMMENT}
 void duckdb_wasm_httpfs_init(duckdb_database db) {
     if (!db) return;
 
@@ -1173,9 +1379,7 @@ void duckdb_wasm_httpfs_init(duckdb_database db) {
         // Load extensions using LoadStaticExtension — this registers with the
         // extension manager (BeginLoad/FinalizeLoad) so ExtensionIsLoaded() works
         // and secret types, functions etc. are properly discoverable.
-        duckdb_instance.LoadStaticExtension<duckdb::HttpfsExtension>();
-        duckdb_instance.LoadStaticExtension<duckdb::AvroExtension>();
-        duckdb_instance.LoadStaticExtension<duckdb::IcebergExtension>();
+        ${EXTENSION_LOADS}
 
     } catch (std::exception &e) {
         snprintf(g_init_error, sizeof(g_init_error), "%s", e.what());
@@ -1363,6 +1567,7 @@ MAINEOF
         -I"${DUCKDB_SRC}/third_party/re2" \
         -I"${ICEBERG_SRC}/src/include" \
         -I"${AVRO_SRC}/src/include" \
+        -I"${DUCKLAKE_SRC}/src/include" \
         -I"${VCPKG_INSTALLED}/include" \
         -s WASM=1 \
         -s MODULARIZE=1 \
@@ -1481,15 +1686,29 @@ print_summary() {
     fi
 
     echo ""
-    log_info "Built with static extensions: httpfs, avro, iceberg (WASM HTTP client)"
+    if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+        log_info "Built with static extensions: httpfs, ducklake (WASM HTTP client)"
+    else
+        log_info "Built with static extensions: httpfs, avro, iceberg (WASM HTTP client)"
+    fi
     if [ "$TARGET" = "workers" ]; then
         log_info "This build uses Asyncify + fetch() for Cloudflare Workers"
     else
         log_info "This build uses synchronous XMLHttpRequest for browsers"
     fi
     log_info "Next steps:"
-    log_info "  1. Build TypeScript package: cd packages/ducklings-browser && pnpm build"
-    log_info "  2. Run example: cd examples/browser && pnpm dev"
+    if [ "$TARGET" = "workers" ]; then
+        if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+            log_info "  1. Build TypeScript package: make typescript-workers-ducklake"
+            log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker-ducklake build"
+        else
+            log_info "  1. Build TypeScript package: make typescript-workers"
+            log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker-iceberg build"
+        fi
+    else
+        log_info "  1. Build TypeScript package: cd packages/ducklings-browser && pnpm build"
+        log_info "  2. Run example: cd examples/browser && pnpm dev"
+    fi
 }
 
 main() {
@@ -1501,7 +1720,7 @@ main() {
         link_wasm_module
         print_summary
     else
-        log_info "Starting DuckDB WASM build with static extensions (target: ${TARGET})..."
+        log_info "Starting DuckDB WASM build with static extensions (target: ${TARGET}, flavor: ${EXTENSION_FLAVOR})..."
         echo ""
         check_emscripten
         check_duckdb_source
@@ -1515,8 +1734,12 @@ main() {
         bundle_nanoarrow
         build_nanoarrow
         build_arrow_ipc_insert
-        build_avro
-        build_iceberg
+        if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+            build_ducklake
+        else
+            build_avro
+            build_iceberg
+        fi
         link_wasm_module
         print_summary
     fi

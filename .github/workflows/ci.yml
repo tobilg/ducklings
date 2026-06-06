@@ -78,8 +78,11 @@ jobs:
             exit 1
           fi
 
-      - name: Build workers WASM
+      - name: Build Iceberg workers WASM
         run: make duckdb-workers
+
+      - name: Build DuckLake workers WASM
+        run: make duckdb-workers-ducklake
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v6
@@ -90,6 +93,8 @@ jobs:
             dist/duckdb.wasm
             dist/duckdb-workers.js
             dist/duckdb-workers.wasm
+            dist/duckdb-workers-ducklake.js
+            dist/duckdb-workers-ducklake.wasm
           retention-days: 7
 
   # Build/test browser package
@@ -177,7 +182,51 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: workers-dist
-          path: packages/ducklings-workers/dist
+          path: packages/ducklings-workers-iceberg/dist
+          retention-days: 7
+
+  # Build/test DuckLake workers package
+  workers-ducklake:
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: wasm-artifacts
+          path: dist
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @ducklings/workers-ducklake build
+
+      - name: Type check
+        run: pnpm --filter @ducklings/workers-ducklake typecheck
+
+      - name: Test
+        run: pnpm --filter @ducklings/workers-ducklake test
+
+      - name: Upload DuckLake workers dist
+        uses: actions/upload-artifact@v6
+        with:
+          name: workers-ducklake-dist
+          path: packages/ducklings-workers-ducklake/dist
           retention-days: 7
 
   # Lint check
@@ -206,3 +255,6 @@ jobs:
 
       - name: Lint workers package
         run: pnpm --filter @ducklings/workers lint || true
+
+      - name: Lint DuckLake workers package
+        run: pnpm --filter @ducklings/workers-ducklake lint || true

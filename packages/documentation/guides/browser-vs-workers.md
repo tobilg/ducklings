@@ -9,14 +9,15 @@ Ducklings provides two packages optimized for different JavaScript runtime envir
 
 ## Package Comparison
 
-| Feature | @ducklings/browser | @ducklings/workers |
-|---------|-------------------|-------------------|
-| **Runtime** | Browsers | Cloudflare Workers |
-| **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) |
-| **WASM size** | ~6.3 MiB | ~9.7 MiB |
-| **HTTP support** | Via httpfs extension | Native async fetch() |
-| **JSON extension** | Not bundled | Not bundled |
-| **Threading** | Offloaded to Web Worker | Single-threaded |
+| Feature | @ducklings/browser | @ducklings/workers | @ducklings/workers-ducklake |
+|---------|-------------------|-------------------|-------------------------------|
+| **Runtime** | Browsers | Cloudflare Workers | Cloudflare Workers |
+| **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) | Asyncify (Emscripten) |
+| **WASM size** | ~6.3 MiB | Near paid Worker gzip limit | Slightly smaller; near paid Worker gzip limit |
+| **HTTP support** | Via httpfs extension | Native async fetch() | Native async fetch() |
+| **Lakehouse extension** | Iceberg | Iceberg | DuckLake |
+| **JSON extension** | Not bundled | Not bundled | Not bundled |
+| **Threading** | Offloaded to Web Worker | Single-threaded | Single-threaded |
 
 ## When to Use @ducklings/browser
 
@@ -44,9 +45,12 @@ Use the workers package when:
 
 - Deploying to Cloudflare Workers or similar serverless platforms
 - You need async HTTP fetching inside DuckDB queries
+- You need Avro/Iceberg support
 - Building edge functions or serverless APIs
 
-> **Important:** The workers package requires a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) due to the WASM size (~9.7MB). The free plan has a 3MB limit, while paid plans support up to 10MB.
+Use `@ducklings/workers-ducklake` instead when the Worker only needs `httpfs` and DuckLake.
+
+> **Important:** The workers packages require a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) because the bundled WASM is close to Cloudflare's compressed Worker size limit. Use `wrangler deploy --dry-run --outdir bundled` after each build to confirm the final gzip size for your Worker.
 
 ```typescript
 import { init, DuckDB } from '@ducklings/workers';

@@ -14,6 +14,10 @@
 	path = deps/duckdb-avro
 	url = https://github.com/duckdb/duckdb_avro.git
 
+[submodule "deps/ducklake"]
+	path = deps/ducklake
+	url = https://github.com/duckdb/ducklake.git
+
 [submodule "deps/nanoarrow"]
 	path = deps/nanoarrow
 	url = https://github.com/apache/arrow-nanoarrow.git

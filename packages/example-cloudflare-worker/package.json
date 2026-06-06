@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check-deps": "test -f ../ducklings-workers/dist/index.js || (echo 'Error: @ducklings/workers has not been built yet.' && echo 'Run the following from the repo root first:' && echo '' && echo '  make duckdb-workers      # compile WASM with Asyncify (~3 min)' && echo '  make typescript-workers   # build TypeScript package' && exit 1)",
+    "check-deps": "test -f ../ducklings-workers-iceberg/dist/index.js || (echo 'Error: @ducklings/workers has not been built yet.' && echo 'Run the following from the repo root first:' && echo '' && echo '  make duckdb-workers      # compile Iceberg WASM with Asyncify' && echo '  make typescript-workers   # build TypeScript package' && exit 1)",
     "predev": "pnpm run check-deps",
     "prebuild": "pnpm run check-deps",
     "build": "vite build",

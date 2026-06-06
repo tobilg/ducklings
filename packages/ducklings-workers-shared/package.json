@@ -1,0 +1,9 @@
+{
+  "name": "@ducklings/workers-shared",
+  "version": "1.5.3",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@uwdata/flechette": "^2.3.0"
+  }
+}

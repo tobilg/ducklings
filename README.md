@@ -9,7 +9,8 @@ A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 | Package | Description | Install |
 |---------|-------------|---------|
 | [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) | Browser version (async API) | `npm install @ducklings/browser` |
-| [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers version (async API) | `npm install @ducklings/workers` |
+| [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers version with Iceberg (async API) | `npm install @ducklings/workers` |
+| [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake) | Cloudflare Workers version with DuckLake (async API) | `npm install @ducklings/workers-ducklake` |
 
 ## Documentation 
 
@@ -21,7 +22,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 
 ## Features
 
-- **Minimal footprint**: ~6.3 MiB (browser) / ~9.7 MiB (workers) gzipped WASM (optimized with -Oz, LTO, wasm-opt)
+- **Minimal footprint**: ~6.3 MiB (browser) / near Cloudflare Workers paid gzip limit (workers) (optimized with -Oz, LTO, wasm-opt)
 - **TypeScript API**: Full TypeScript support with type definitions
 - **Prepared statements**: Secure parameterized queries with full type support
 - **Streaming results**: Memory-efficient chunked data processing
@@ -30,16 +31,19 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 - **Parquet support**: Read Parquet files with built-in extension
 - **httpfs support**: Load remote files via HTTP/HTTPS
 - **JSON support**: Not bundled in the published browser or workers packages to stay within Cloudflare deployment size limits; use a custom build if you need DuckDB's `json` extension
-- **Cloudflare Workers**: First-class support with dedicated async package
+- **Cloudflare Workers**: First-class support with dedicated Iceberg and DuckLake async packages
 - **Browser support**: Works in modern browsers with ES modules
 
 ## Extension Availability
 
-| Extension / Feature | `@ducklings/browser` | `@ducklings/workers` |
-|---------------------|----------------------|----------------------|
-| `parquet` | :white_check_mark: | :white_check_mark: |
-| `httpfs` | :white_check_mark: | :white_check_mark: |
-| `json` | Default build: :x: | Default build: :x: |
+| Extension / Feature | `@ducklings/browser` | `@ducklings/workers` | `@ducklings/workers-ducklake` |
+|---------------------|----------------------|----------------------|-------------------------------|
+| `parquet` | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| `httpfs` | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| `avro` | :white_check_mark: | :white_check_mark: | :x: |
+| `iceberg` | :white_check_mark: | :white_check_mark: | :x: |
+| `ducklake` | :x: | :x: | :white_check_mark: |
+| `json` | Default build: :x: | Default build: :x: | Default build: :x: |
 
 The published browser and workers packages do not bundle DuckDB's `json` extension so the artifacts stay within Cloudflare Pages and Workers size limits. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
 
@@ -124,10 +128,11 @@ export default {
 
 **Why two packages?** Cloudflare Workers doesn't support synchronous XMLHttpRequest (browser-only API). The workers package uses Emscripten's Asyncify to enable async `fetch()` calls, making httpfs work properly. The async API means all query methods return Promises.
 
-| Package | API Style | Size (gzipped) | httpfs |
-|---------|-----------|----------------|--------|
-| `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | Works in browsers |
-| `@ducklings/workers` | Async (Asyncify) | ~9.7 MiB | Works in CF Workers |
+| Package | API Style | Size (gzipped) | Extension focus |
+|---------|-----------|----------------|-----------------|
+| `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | Browser + Iceberg |
+| `@ducklings/workers` | Async (Asyncify) | ~9.7 MiB | Workers + Iceberg |
+| `@ducklings/workers-ducklake` | Async (Asyncify) | Measured during build | Workers + DuckLake |
 
 #### Arrow IPC Endpoint
 
@@ -210,7 +215,7 @@ Load directly from jsDelivr or unpkg - cross-origin workers are handled automati
 
 ```html
 <script type="module">
-  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@1.5.0/+esm';
+  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@1.5.3/+esm';
 
   await init();
 
@@ -493,7 +498,7 @@ const csvData = await conn.query(`
 `);
 ```
 
-`read_json('https://...')` is not available in the standard `@ducklings/browser` or `@ducklings/workers` packages because they do not bundle DuckDB's `json` extension. It requires a custom build with that extension enabled.
+`read_json('https://...')` is not available in the standard `@ducklings/browser`, `@ducklings/workers`, or `@ducklings/workers-ducklake` packages because they do not bundle DuckDB's `json` extension. It requires a custom build with that extension enabled.
 
 ### S3 and R2 Secrets
 
@@ -551,7 +556,7 @@ See the [Cloudflare Workers example](./packages/example-cloudflare-worker/) for 
 
 ### JSON Functions
 
-The published `@ducklings/browser` and `@ducklings/workers` packages do not bundle DuckDB's `json` extension so the artifacts stay small enough for Cloudflare Pages and Workers deployment.
+The published `@ducklings/browser`, `@ducklings/workers`, and `@ducklings/workers-ducklake` packages do not bundle DuckDB's `json` extension so the artifacts stay small enough for Cloudflare Pages and Workers deployment.
 
 If you need JSON functions such as `json_extract(...)`, the `::JSON` type alias, or file readers like `read_json()` / `read_ndjson_auto()`, build a custom WASM artifact with the `json` extension enabled.
 
@@ -582,7 +587,7 @@ The WASM binary is optimized for size using:
 - **wasm-opt**: Binaryen post-processing with `-Oz --converge`
 - **Reduced exports**: Only 59 essential C functions exported
 
-Result: **~6.3 MiB gzipped** for browser and **~9.7 MiB gzipped** for the default workers build. Neither published package bundles the JSON extension, which keeps the artifacts within Cloudflare Pages and Workers deployment size limits.
+Result: **~6.3 MiB gzipped** for browser. Workers builds are close to Cloudflare's paid-plan gzip limit; the DuckLake flavor is slightly smaller than the Iceberg flavor, and neither workers package bundles the JSON extension. Use `wrangler deploy --dry-run --outdir bundled` to confirm the final compressed Worker size before deploying.
 
 ## Development
 
@@ -621,9 +626,11 @@ make typescript-all
 
 # Individual steps
 make duckdb-browser     # Compile browser WASM (~2 min)
-make duckdb-workers     # Compile workers WASM with Asyncify (~3 min)
+make duckdb-workers     # Compile Iceberg workers WASM with Asyncify
+make duckdb-workers-ducklake # Compile DuckLake workers WASM with Asyncify
 make typescript-browser # Build @ducklings/browser package
 make typescript-workers # Build @ducklings/workers package
+make typescript-workers-ducklake # Build @ducklings/workers-ducklake package
 
 # Clean and rebuild
 make clean && make all
@@ -631,16 +638,17 @@ make clean && make all
 
 ### Versioning
 
-Both npm packages use the same version, derived from `DUCKDB_VERSION` in the Makefile:
+All npm packages use the same version, derived from `DUCKDB_VERSION` in the Makefile:
 
 ```
-Makefile: DUCKDB_VERSION := v1.5.0
+Makefile: DUCKDB_VERSION := v1.5.3
                 ↓
-    @ducklings/browser@1.5.0
-    @ducklings/workers@1.5.0
+    @ducklings/browser@1.5.3
+    @ducklings/workers@1.5.3
+    @ducklings/workers-ducklake@1.5.3
 ```
 
-To update the version, change `DUCKDB_VERSION` in the Makefile. The version is automatically synced to both `package.json` files during the build process via `make sync-versions`.
+To update the version, change `DUCKDB_VERSION` in the Makefile. The version is automatically synced to package manifests during the build process via `make sync-versions`.
 
 ```bash
 # Manually sync versions (also runs automatically during typescript builds)
@@ -782,16 +790,24 @@ ducklings/
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM (~6.3 MiB gzipped)
-│   ├── duckdb-workers.js          # Workers JS glue (with Asyncify)
-│   └── duckdb-workers.wasm        # Workers WASM (~9.7 MiB gzipped)
+│   ├── duckdb-workers.js          # Iceberg Workers JS glue (with Asyncify)
+│   ├── duckdb-workers.wasm        # Iceberg Workers WASM (~9.7 MiB gzipped)
+│   ├── duckdb-workers-ducklake.js # DuckLake Workers JS glue (with Asyncify)
+│   └── duckdb-workers-ducklake.wasm # DuckLake Workers WASM
 ├── packages/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
 │   │   ├── src/index.ts           # Browser entry point
 │   │   └── dist/                  # Built package
 │   │       ├── index.js           # ESM bundle
 │   │       └── wasm/              # WASM files
-│   ├── ducklings-workers/  # @ducklings/workers (npm)
-│   │   ├── src/index.ts           # Workers entry point (async API)
+│   ├── ducklings-workers-shared/  # Shared Workers API implementation
+│   ├── ducklings-workers-iceberg/ # @ducklings/workers (npm)
+│   │   ├── src/index.ts           # Iceberg Workers package entry
+│   │   └── dist/                  # Built package
+│   │       ├── index.js           # ESM bundle
+│   │       └── wasm/              # WASM files
+│   ├── ducklings-workers-ducklake/ # @ducklings/workers-ducklake (npm)
+│   │   ├── src/index.ts           # DuckLake Workers package entry
 │   │   └── dist/                  # Built package
 │   │       ├── index.js           # ESM bundle
 │   │       └── wasm/              # WASM files
@@ -830,7 +846,7 @@ ducklings/
 
 ## Known Limitations
 
-1. **WASM Size**: Browser ~6.3 MiB, Workers ~9.7 MiB gzipped. Exceeds CF Workers free tier (3MB) but works with paid tier
+1. **WASM Size**: Browser ~6.3 MiB, Workers near Cloudflare's paid-plan gzip limit. Exceeds CF Workers free tier (3MB); use Wrangler dry-run to verify the final paid-plan upload size
 2. **No file system**: In-memory databases only (use httpfs for remote files)
 3. **No threads**: Single-threaded execution
 4. **WASM_BIGINT=0**: 64-bit integers passed as two 32-bit values (handled internally)

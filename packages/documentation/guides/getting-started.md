@@ -27,6 +27,14 @@ npm install @ducklings/workers
 pnpm add @ducklings/workers
 ```
 
+For the DuckLake Workers flavor:
+
+```bash
+npm install @ducklings/workers-ducklake
+# or
+pnpm add @ducklings/workers-ducklake
+```
+
 ## Basic Usage
 
 ### Browser
@@ -78,7 +86,7 @@ db.close();
 
 ## Query Methods
 
-Both packages provide the same query methods:
+All packages provide the same query methods:
 
 | Method | Returns | Use Case |
 |--------|---------|----------|

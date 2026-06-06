@@ -123,7 +123,7 @@ The worker is configured via `wrangler.jsonc`:
 
 ## Notes
 
-- **Paid Plan Required**: The DuckDB WASM binary is ~9.7MB gzipped, which exceeds the free tier limit of 3MB. A paid Workers plan (10MB limit) is required.
+- **Paid Plan Required**: The DuckDB WASM bundle is close to Cloudflare's paid Worker gzip limit and exceeds the free tier limit of 3MB. Run `wrangler deploy --dry-run --outdir bundled` to verify the final gzip size before deploying.
 - **Cold Start**: First request may be slower due to WASM initialization. Subsequent requests reuse the initialized database.
 - **Memory Limit**: Workers have a 128MB memory limit. Large queries or datasets may exceed this.
 - **No Dynamic Extensions**: The standard build includes Parquet and httpfs. DuckDB's `json` extension is not bundled anymore, and `INSTALL`/`LOAD` will not add it at runtime.

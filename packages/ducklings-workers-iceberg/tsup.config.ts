@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig([
   // Main library build
   {
-    entry: ['src/index.ts'],
+    entry: { index: '../ducklings-workers-shared/src/index.ts' },
     format: ['esm', 'cjs'],
     dts: true,
     sourcemap: true,
@@ -16,7 +16,7 @@ export default defineConfig([
     noExternal: ['@uwdata/flechette'],
     esbuildOptions(options) {
       options.banner = {
-        js: '// Ducklings Workers - Minimal DuckDB for Cloudflare Workers',
+        js: '// Ducklings Workers Iceberg - DuckDB for Cloudflare Workers',
       };
     },
   },
