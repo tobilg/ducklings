@@ -267,7 +267,11 @@ if [ "$TARGET" = "workers" ]; then
     ASYNCIFY_ADD+="'duckdb::DuckLakeTransaction*',"
     ASYNCIFY_ADD+="'duckdb::DuckLakeStorage*',"
     ASYNCIFY_ADD+="'duckdb::DuckLakeCatalog*',"
-    ASYNCIFY_ADD+="'duckdb::DuckLakeMultiFile*'"
+    ASYNCIFY_ADD+="'duckdb::DuckLakeMultiFile*',"
+    # Quack client/catalog paths used by DuckLake metadata queries
+    ASYNCIFY_ADD+="'duckdb::Quack*',"
+    ASYNCIFY_ADD+="'duckdb::HttpsQuackClient*',"
+    ASYNCIFY_ADD+="'duckdb::QuackClient*'"
     ASYNCIFY_ADD+="]"
     # Default Asyncify + selective REMOVE. Only remove third-party libraries
     # that are self-contained and never called from the async path.
@@ -406,6 +410,7 @@ DUCKDB_SRC="${PROJECT_ROOT}/deps/duckdb"
 HTTPFS_SRC="${PROJECT_ROOT}/deps/duckdb-httpfs"
 ICEBERG_SRC="${PROJECT_ROOT}/deps/duckdb-iceberg"
 AVRO_SRC="${PROJECT_ROOT}/deps/duckdb-avro"
+QUACK_SRC="${PROJECT_ROOT}/deps/duckdb-quack"
 DUCKLAKE_SRC="${PROJECT_ROOT}/deps/ducklake"
 NANOARROW_SRC="${PROJECT_ROOT}/deps/nanoarrow"
 HTTP_WASM_SRC="${PROJECT_ROOT}/src/http"
@@ -418,6 +423,7 @@ VCPKG_BASELINE="84bab45d415d22042bd0b9081aea57f362da3f35"
 # Number of parallel jobs
 CORES=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 ICEBERG_CORES="${DUCKLINGS_ICEBERG_JOBS:-$CORES}"
+QUACK_CORES="${DUCKLINGS_QUACK_JOBS:-$CORES}"
 DUCKLAKE_CORES="${DUCKLINGS_DUCKLAKE_JOBS:-$CORES}"
 
 # Colors for output
@@ -559,6 +565,37 @@ compile_ducklake_source_if_needed() {
         -I"${VCPKG_INSTALLED}/include"
 }
 
+compile_quack_source_if_needed() {
+    local src_file="$1"
+    local rel_path="${src_file#${QUACK_SRC}/src/}"
+    local obj_base="${rel_path//\//_}"
+    local obj_path=""
+    local dep_path=""
+
+    obj_base="${obj_base%.cpp}"
+    obj_path="${BUILD_DIR}/quack/${obj_base}.o"
+    dep_path="${BUILD_DIR}/quack/${obj_base}.d"
+
+    compile_source_if_needed "${rel_path}" "${src_file}" "${obj_path}" "${dep_path}" \
+        -Oz \
+        -ffunction-sections \
+        -fdata-sections \
+        -std=c++17 \
+        -DNDEBUG \
+        -DDUCKDB_NO_THREADS=1 \
+        -DQUACK_CLIENT_ONLY_WASM=1 \
+        -I"${QUACK_SRC}/src/include" \
+        -I"${DUCKDB_SRC}/src/include" \
+        -I"${BUILD_DIR}/src/include" \
+        -I"${DUCKDB_SRC}/third_party/fmt/include" \
+        -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
+        -I"${DUCKDB_SRC}/third_party/re2" \
+        -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
+        -I"${DUCKDB_SRC}/extension/parquet/include" \
+        -I"${HTTPFS_SRC}/src/include" \
+        -I"${VCPKG_INSTALLED}/include"
+}
+
 check_emscripten() {
     if ! command -v emcc &> /dev/null; then
         log_error "Emscripten (emcc) not found in PATH"
@@ -599,6 +636,13 @@ check_duckdb_source() {
     fi
 
     if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+        if [ ! -d "$QUACK_SRC" ]; then
+            log_error "Quack extension source not found at $QUACK_SRC"
+            log_info "Run 'make deps' to initialize submodules"
+            exit 1
+        fi
+        log_info "Quack source found at $QUACK_SRC"
+
         if [ ! -d "$DUCKLAKE_SRC" ]; then
             log_error "DuckLake extension source not found at $DUCKLAKE_SRC"
             log_info "Run 'make deps' to initialize submodules"
@@ -659,6 +703,7 @@ apply_patches() {
         apply_patch_series "$ICEBERG_SRC" "${PATCH_ROOT}/duckdb-iceberg" "duckdb-iceberg"
     fi
     if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+        apply_patch_series "$QUACK_SRC" "${PATCH_ROOT}/duckdb-quack" "duckdb-quack"
         apply_patch_series "$DUCKLAKE_SRC" "${PATCH_ROOT}/ducklake" "ducklake"
     fi
 
@@ -1129,6 +1174,68 @@ build_ducklake() {
     log_info "ducklake extension built!"
 }
 
+build_quack_client() {
+    log_info "Building quack client extension..."
+
+    mkdir -p "${BUILD_DIR}/quack"
+    cd "${BUILD_DIR}/quack"
+
+    local -a QUACK_SOURCES=(
+        "${QUACK_SRC}/src/quack_clear_cache.cpp"
+        "${QUACK_SRC}/src/quack_client.cpp"
+        "${QUACK_SRC}/src/quack_extension.cpp"
+        "${QUACK_SRC}/src/quack_log.cpp"
+        "${QUACK_SRC}/src/quack_message.cpp"
+        "${QUACK_SRC}/src/quack_scan.cpp"
+        "${QUACK_SRC}/src/quack_storage.cpp"
+        "${QUACK_SRC}/src/quack_uri.cpp"
+        "${QUACK_SRC}/src/serialize_quack_message.cpp"
+        "${QUACK_SRC}/src/storage/quack_catalog.cpp"
+        "${QUACK_SRC}/src/storage/quack_catalog_set.cpp"
+        "${QUACK_SRC}/src/storage/quack_insert.cpp"
+        "${QUACK_SRC}/src/storage/quack_optimizer.cpp"
+        "${QUACK_SRC}/src/storage/quack_schema.cpp"
+        "${QUACK_SRC}/src/storage/quack_table.cpp"
+        "${QUACK_SRC}/src/storage/quack_transaction.cpp"
+        "${QUACK_SRC}/src/storage/quack_transaction_manager.cpp"
+        "${QUACK_SRC}/src/storage/quack_view.cpp"
+    )
+
+    if ! [[ "${QUACK_CORES}" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "DUCKLINGS_QUACK_JOBS must be a positive integer (got: ${QUACK_CORES})"
+        exit 1
+    fi
+
+    local -a QUACK_OBJS=()
+    local src_file=""
+    local rel_path=""
+    local obj_name=""
+    for src_file in "${QUACK_SOURCES[@]}"; do
+        if [ ! -f "${src_file}" ]; then
+            log_error "Quack source file not found: ${src_file}"
+            exit 1
+        fi
+        rel_path="${src_file#${QUACK_SRC}/src/}"
+        obj_name="${rel_path//\//_}"
+        obj_name="${obj_name%.cpp}.o"
+        QUACK_OBJS+=("${BUILD_DIR}/quack/${obj_name}")
+    done
+
+    log_info "  Checking ${#QUACK_SOURCES[@]} source files with ${QUACK_CORES} parallel jobs..."
+
+    export BUILD_DIR QUACK_SRC DUCKDB_SRC HTTPFS_SRC VCPKG_INSTALLED GREEN NC
+    export -f log_info depfile_needs_rebuild compile_source_if_needed compile_quack_source_if_needed
+    printf '%s\n' "${QUACK_SOURCES[@]}" | xargs -P "${QUACK_CORES}" -I{} bash -c '
+        set -euo pipefail
+        compile_quack_source_if_needed "$1"
+    ' _ {}
+
+    archive_if_needed "${BUILD_DIR}/quack/libquack_extension.a" "${QUACK_OBJS[@]}"
+
+    cd "${PROJECT_ROOT}"
+    log_info "quack client extension built!"
+}
+
 prepare_generated_extension_loader() {
     local generated_loader="${BUILD_DIR}/codegen/src/generated_extension_loader.cpp"
 
@@ -1237,6 +1344,11 @@ find_duckdb_libraries() {
         LIBS="${LIBS} ${BUILD_DIR}/iceberg/libiceberg_extension.a"
     fi
 
+    # Quack client extension (DuckLake flavor)
+    if [ "${EXTENSION_FLAVOR}" = "ducklake" ] && [ -f "${BUILD_DIR}/quack/libquack_extension.a" ]; then
+        LIBS="${LIBS} ${BUILD_DIR}/quack/libquack_extension.a"
+    fi
+
     # DuckLake extension
     if [ "${EXTENSION_FLAVOR}" = "ducklake" ] && [ -f "${BUILD_DIR}/ducklake/libducklake_extension.a" ]; then
         LIBS="${LIBS} ${BUILD_DIR}/ducklake/libducklake_extension.a"
@@ -1283,21 +1395,25 @@ link_wasm_module() {
     local EXTENSION_LOADS=""
     local EXTENSION_LOAD_COMMENT=""
     if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
-        EXTENSION_INCLUDES='#include "ducklake_extension.hpp"'
+        EXTENSION_INCLUDES='#include "quack_extension.hpp"
+#include "ducklake_extension.hpp"'
         PRELOADED_FLAGS='bool preloaded_httpfs = true;
 bool preloaded_avro = false;
 bool preloaded_iceberg = false;
-bool preloaded_ducklake = true;'
+bool preloaded_ducklake = true;
+bool preloaded_quack = true;'
         EXTENSION_LOADS='duckdb_instance.LoadStaticExtension<duckdb::HttpfsExtension>();
+        duckdb_instance.LoadStaticExtension<duckdb::QuackExtension>();
         duckdb_instance.LoadStaticExtension<duckdb::DucklakeExtension>();'
-        EXTENSION_LOAD_COMMENT='// Loading order: httpfs (sets up HTTPWasmUtil) -> ducklake'
+        EXTENSION_LOAD_COMMENT='// Loading order: httpfs (sets up HTTPWasmUtil) -> quack -> ducklake'
     else
         EXTENSION_INCLUDES='#include "avro_extension.hpp"
 #include "iceberg_extension.hpp"'
         PRELOADED_FLAGS='bool preloaded_httpfs = true;
 bool preloaded_avro = true;
 bool preloaded_iceberg = true;
-bool preloaded_ducklake = false;'
+bool preloaded_ducklake = false;
+bool preloaded_quack = false;'
         EXTENSION_LOADS='duckdb_instance.LoadStaticExtension<duckdb::HttpfsExtension>();
         duckdb_instance.LoadStaticExtension<duckdb::AvroExtension>();
         duckdb_instance.LoadStaticExtension<duckdb::IcebergExtension>();'
@@ -1567,6 +1683,7 @@ MAINEOF
         -I"${DUCKDB_SRC}/third_party/re2" \
         -I"${ICEBERG_SRC}/src/include" \
         -I"${AVRO_SRC}/src/include" \
+        -I"${QUACK_SRC}/src/include" \
         -I"${DUCKLAKE_SRC}/src/include" \
         -I"${VCPKG_INSTALLED}/include" \
         -s WASM=1 \
@@ -1687,7 +1804,7 @@ print_summary() {
 
     echo ""
     if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
-        log_info "Built with static extensions: httpfs, ducklake (WASM HTTP client)"
+        log_info "Built with static extensions: httpfs, quack client, ducklake (WASM HTTP client)"
     else
         log_info "Built with static extensions: httpfs, avro, iceberg (WASM HTTP client)"
     fi
@@ -1735,6 +1852,7 @@ main() {
         build_nanoarrow
         build_arrow_ipc_insert
         if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
+            build_quack_client
             build_ducklake
         else
             build_avro

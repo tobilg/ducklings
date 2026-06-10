@@ -10,10 +10,11 @@ DUCKDB_VERSION := v1.5.3
 DUCKDB_HTTPFS_VERSION := 53c5b032f6c368cfcc1a1ac3819118e86d3286a6
 DUCKDB_ICEBERG_VERSION := v1.5-variegata
 DUCKDB_AVRO_VERSION := v1.5-variegata
+DUCKDB_QUACK_VERSION := v1.5-variegata
 DUCKDB_DUCKLAKE_VERSION := v1.5-variegata
 NANOARROW_VERSION := apache-arrow-nanoarrow-0.8.0
 VCPKG_BASELINE := 84bab45d415d22042bd0b9081aea57f362da3f35
-VERSION_SUFFIX := -dev.1
+VERSION_SUFFIX := -dev.2
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 define find_files
@@ -64,6 +65,7 @@ NATIVE_BUILD_SOURCES := \
 	$(call find_files,deps/duckdb-httpfs) \
 	$(call find_files,deps/duckdb-iceberg) \
 	$(call find_files,deps/duckdb-avro) \
+	$(call find_files,deps/duckdb-quack) \
 	$(call find_files,deps/ducklake) \
 	$(call find_files,deps/nanoarrow)
 
@@ -96,7 +98,7 @@ WORKERS_DUCKLAKE_PACKAGE_SOURCES := \
 	packages/ducklings-workers-ducklake/tsup.config.ts \
 	$(PNPM_MANIFESTS)
 
-.PHONY: all clean rebuild deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-all duckdb-all typescript typescript-browser typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-all typescript-all check-deps show-versions example help
+.PHONY: all clean rebuild deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-all duckdb-all typescript typescript-browser typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-all typescript-all check-deps check-worker-ducklake-size show-versions example help
 
 all: check-deps deps duckdb-all typescript-all
 
@@ -115,6 +117,8 @@ pin-versions:
 	@$(call checkout_dependency_version,deps/duckdb-iceberg,$(DUCKDB_ICEBERG_VERSION))
 	@echo "Pinning deps/duckdb-avro to $(DUCKDB_AVRO_VERSION)"
 	@$(call checkout_dependency_version,deps/duckdb-avro,$(DUCKDB_AVRO_VERSION))
+	@echo "Pinning deps/duckdb-quack to $(DUCKDB_QUACK_VERSION)"
+	@$(call checkout_dependency_version,deps/duckdb-quack,$(DUCKDB_QUACK_VERSION))
 	@echo "Pinning deps/ducklake to $(DUCKDB_DUCKLAKE_VERSION)"
 	@$(call checkout_dependency_version,deps/ducklake,$(DUCKDB_DUCKLAKE_VERSION))
 	@echo "Pinning deps/nanoarrow to $(NANOARROW_VERSION)"
@@ -217,6 +221,9 @@ typescript-workers-all: typescript-workers-iceberg typescript-workers-ducklake
 # Build all TypeScript packages
 typescript-all: typescript-browser typescript-workers-all
 
+check-worker-ducklake-size:
+	bash scripts/check-worker-size.sh packages/example-cloudflare-worker-ducklake
+
 # Clean all build artifacts
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
@@ -224,6 +231,7 @@ clean:
 	cd deps/duckdb-httpfs && git checkout -- . || true
 	cd deps/duckdb-iceberg && git checkout -- . || true
 	cd deps/duckdb-avro && git checkout -- . || true
+	cd deps/duckdb-quack && git checkout -- . || true
 	cd deps/ducklake && git checkout -- . || true
 	rm -rf vcpkg_installed
 	cd packages/ducklings-browser && rm -rf node_modules dist || true

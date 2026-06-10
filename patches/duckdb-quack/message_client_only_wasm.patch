@@ -1,0 +1,41 @@
+diff --git a/src/quack_message.cpp b/src/quack_message.cpp
+index e803122..9b7ba32 100644
+--- a/src/quack_message.cpp
++++ b/src/quack_message.cpp
+@@ -5,11 +5,19 @@
+ 
+ #include "quack_message.hpp"
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "quack_server.hpp"
++#endif
+ #include "duckdb/main/database.hpp"
+ 
+ namespace duckdb {
+ 
++#ifdef QUACK_CLIENT_ONLY_WASM
++static constexpr idx_t QUACK_PROTOCOL_VERSION = 1;
++#else
++static constexpr idx_t QUACK_PROTOCOL_VERSION = QuackServer::QUACK_VERSION;
++#endif
++
+ QuackMessage::QuackMessage(MessageType type) : header(type, string()) {
+ }
+ QuackMessage::QuackMessage(MessageType type, string connection_id_p) : header(type, std::move(connection_id_p)) {
+@@ -149,13 +157,13 @@ unique_ptr<QuackMessage> QuackMessage::DeserializeMessage(BinaryDeserializer &de
+ 
+ ConnectionRequestMessage::ConnectionRequestMessage(const string &auth_string_p)
+     : QuackMessage(TYPE), auth_string(auth_string_p), client_duckdb_version(DuckDB::LibraryVersion()),
+-      client_platform(DuckDB::Platform()), min_supported_quack_version(QuackServer::QUACK_VERSION),
+-      max_supported_quack_version(QuackServer::QUACK_VERSION) {
++      client_platform(DuckDB::Platform()), min_supported_quack_version(QUACK_PROTOCOL_VERSION),
++      max_supported_quack_version(QUACK_PROTOCOL_VERSION) {
+ }
+ 
+ ConnectionResponseMessage::ConnectionResponseMessage(string connection_id_p)
+     : QuackMessage(TYPE, std::move(connection_id_p)), server_duckdb_version(DuckDB::LibraryVersion()),
+-      server_platform(DuckDB::Platform()), quack_version(QuackServer::QUACK_VERSION) {
++      server_platform(DuckDB::Platform()), quack_version(QUACK_PROTOCOL_VERSION) {
+ }
+ 
+ unique_ptr<QuackMessage> QuackMessage::FromMemoryStream(MemoryStream &read_stream) {

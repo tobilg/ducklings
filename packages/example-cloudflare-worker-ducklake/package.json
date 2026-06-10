@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/example-cloudflare-worker-ducklake",
-  "version": "1.5.3",
+  "version": "1.5.3-dev.2",
   "private": true,
   "type": "module",
   "scripts": {

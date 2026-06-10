@@ -1,6 +1,6 @@
 # @ducklings/workers-ducklake
 
-DuckDB WASM for Cloudflare Workers with `httpfs` and `ducklake` statically bundled.
+DuckDB WASM for Cloudflare Workers with `httpfs`, client-only `quack`, and `ducklake` statically bundled.
 
 > This package targets Cloudflare Workers and uses Asyncify so DuckDB can perform async `fetch()`-backed I/O from WASM. It requires a Workers paid plan because the final bundle is close to Cloudflare's compressed Worker size limit. Run `wrangler deploy --dry-run --outdir bundled` against your built Worker to verify the final gzip size.
 
@@ -50,7 +50,7 @@ The plugin resolves `@ducklings/workers-ducklake/wasm` and copies the bundled WA
 
 | Package | Bundled extensions |
 | --- | --- |
-| `@ducklings/workers-ducklake` | `httpfs`, `ducklake` |
+| `@ducklings/workers-ducklake` | `httpfs`, client-only `quack`, `ducklake` |
 | `@ducklings/workers` | `httpfs`, `avro`, `iceberg` |
 
 The published package does not bundle DuckDB's `json` extension to stay within Cloudflare deployment size limits.

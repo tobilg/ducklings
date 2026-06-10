@@ -1,0 +1,174 @@
+diff --git a/src/include/quack_storage.hpp b/src/include/quack_storage.hpp
+index 98d58fe..d4e1b3b 100644
+--- a/src/include/quack_storage.hpp
++++ b/src/include/quack_storage.hpp
+@@ -2,7 +2,9 @@
+ 
+ #include "duckdb/storage/storage_extension.hpp"
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "quack_server.hpp"
++#endif
+ 
+ namespace duckdb {
+ 
+@@ -17,6 +19,7 @@ class QuackStorageExtensionInfo : public StorageExtensionInfo {
+ public:
+ 	static QuackStorageExtensionInfo &GetState(const DatabaseInstance &instance);
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ 	QuackServer &CreateServer(ClientContext &context, const QuackUri &listen_uri, const string &token);
+ 	bool StopServer(ClientContext &context, const QuackUri &listen_uri);
+ 
+@@ -31,11 +34,14 @@ public:
+ 
+ 	vector<QuackConnectionSnapshot> GetActiveConnectionSnaps();
+ 	vector<ServerSnapshot> ListServers();
++#endif
+ 
+ 	static constexpr const char *STORAGE_EXTENSION_KEY = "quack";
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ private:
+ 	std::mutex servers_mutex;
+ 	unordered_map<string, unique_ptr<QuackServer>> servers;
++#endif
+ };
+ } // namespace duckdb
+diff --git a/src/quack_extension.cpp b/src/quack_extension.cpp
+index a9336a3..3548f66 100644
+--- a/src/quack_extension.cpp
++++ b/src/quack_extension.cpp
+@@ -1,6 +1,8 @@
+ #define DUCKDB_EXTENSION_MAIN
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "duckdb/catalog/default/default_table_functions.hpp"
++#endif
+ #include "duckdb/logging/log_manager.hpp"
+ #include "duckdb/main/client_context.hpp"
+ #include "duckdb/main/connection.hpp"
+@@ -13,15 +15,21 @@
+ #include "storage/quack_optimizer.hpp"
+ 
+ #include "include/storage/quack_catalog.hpp"
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "quack_active_connections.hpp"
++#endif
+ #include "quack_clear_cache.hpp"
+ #include "quack_extension.hpp"
+ #include "quack_log.hpp"
+ #include "quack_scan.hpp"
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "quack_startstop.hpp"
++#endif
+ #include "quack_storage.hpp"
+ #include "quack_uri.hpp"
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "include/quack_startstop.hpp"
++#endif
+ #include "include/quack_storage.hpp"
+ #include "include/quack_uri.hpp"
+ 
+@@ -60,6 +68,7 @@ static void RegisterQuackSecretType(ExtensionLoader &loader) {
+ 	loader.RegisterFunction(config_fun);
+ }
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ static bool TimingSafeEqual(const string &a, const string &b) {
+ 	if (a.size() != b.size()) {
+ 		return false;
+@@ -110,16 +119,20 @@ static TableFunction GetQuackIdentifyFunction() {
+ 	fun.named_parameters["meta"] = LogicalType::VARCHAR; // JSON as string
+ 	return fun;
+ }
++#endif
+ 
+ static void LoadInternal(ExtensionLoader &loader) {
+ 	loader.SetDescription("The DuckDB 'Quack' Client/Server Protocol");
+ 
+ 	loader.RegisterFunction(QuackScanFunction::GetFunction());
+ 	loader.RegisterFunction(QuackScanByNameFunction::GetFunction());
++#ifndef QUACK_CLIENT_ONLY_WASM
+ 	loader.RegisterFunction(QuackServeFunction::GetFunction());
+ 	loader.RegisterFunction(QuackStopFunction::GetFunction());
+ 	loader.RegisterFunction(QuackServerListFunction::GetFunction());
++#endif
+ 	loader.RegisterFunction(QuackClearCacheFunction::GetFunction());
++#ifndef QUACK_CLIENT_ONLY_WASM
+ 	loader.RegisterFunction(GetQuackIdentifyFunction());
+ 	loader.RegisterFunction(QuacktivityFunction::GetFunction());
+ 
+@@ -136,6 +149,7 @@ static void LoadInternal(ExtensionLoader &loader) {
+ 	                                 LogicalType::VARCHAR, QuackDummyAuthorization);
+ 	rpc_authorization.SetVolatile();
+ 	loader.RegisterFunction(rpc_authorization);
++#endif
+ 
+ 	loader.RegisterFunction(QuackParseUriFunction::GetFunction());
+ 
+@@ -150,6 +164,7 @@ static void LoadInternal(ExtensionLoader &loader) {
+ 	                           ext);
+ 
+ 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
++#ifndef QUACK_CLIENT_ONLY_WASM
+ 	config.AddExtensionOption("quack_authentication_function", "Name of a callback function for authentication",
+ 	                          LogicalType::VARCHAR, Value("quack_check_token"), nullptr, SetScope::GLOBAL);
+ 	config.AddExtensionOption("quack_authorization_function", "Name of a callback function for authorization",
+@@ -157,12 +172,14 @@ static void LoadInternal(ExtensionLoader &loader) {
+ 
+ 	config.AddExtensionOption("quack_fetch_batch_chunks", "Maximum number of DataChunks returned per FETCH response",
+ 	                          LogicalType::UBIGINT, Value::UBIGINT(12));
++#endif
+ 
+ 	// Process-wide fallback anchor for whoami().uptime when whoami_started_at isn't set.
+ 	// Stored as BIGINT epoch-microseconds to stay TZ-invariant regardless of ICU state.
+ 	config.AddExtensionOption("quack_loaded_at_us", "Epoch microseconds at extension load", LogicalType::BIGINT,
+ 	                          Value::BIGINT(Timestamp::GetCurrentTimestamp().value));
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ 	// whoami() identity fields — global settings so they propagate across all sessions
+ 	// (quack_query creates fresh server-side sessions that wouldn't see per-connection state).
+ 	config.AddExtensionOption("whoami_name", "Human-readable name for this node", LogicalType::VARCHAR, Value(""));
+@@ -201,6 +218,7 @@ static void LoadInternal(ExtensionLoader &loader) {
+ 	};
+ 	auto whoami_info = DefaultTableFunctionGenerator::CreateTableMacroInfo(whoami_macro);
+ 	loader.RegisterFunction(*whoami_info);
++#endif
+ 
+ 	OptimizerExtension quack_optimizer;
+ 	quack_optimizer.optimize_function = QuackOptimizer::Optimize;
+diff --git a/src/quack_storage.cpp b/src/quack_storage.cpp
+index fe67a98..c25f496 100644
+--- a/src/quack_storage.cpp
++++ b/src/quack_storage.cpp
+@@ -1,9 +1,13 @@
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include <thread>
++#endif
+ 
+ #include "duckdb/main/database.hpp"
+ 
+ #include "quack_storage.hpp"
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "quack_server.hpp"
++#endif
+ #include "storage/quack_catalog.hpp"
+ #include "storage/quack_transaction_manager.hpp"
+ 
+@@ -18,6 +22,7 @@ QuackStorageExtensionInfo &QuackStorageExtensionInfo::GetState(const DatabaseIns
+ 	return *static_cast<QuackStorageExtensionInfo *>(ext->storage_info.get());
+ }
+ 
++#ifndef QUACK_CLIENT_ONLY_WASM
+ QuackServer &QuackStorageExtensionInfo::CreateServer(ClientContext &context, const QuackUri &listen_uri,
+                                                      const string &token) {
+ 	auto key = listen_uri.CanonicalUri();
+@@ -79,6 +84,7 @@ bool QuackStorageExtensionInfo::StopServer(ClientContext &context, const QuackUr
+ 	std::thread([srv = std::move(to_destroy)]() mutable { srv.reset(); }).detach();
+ 	return true;
+ }
++#endif
+ 
+ static unique_ptr<Catalog> QuackAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
+                                        AttachedDatabase &db, const string &name, AttachInfo &info,
