@@ -172,3 +172,37 @@ index fe67a98..c25f496 100644
  
  static unique_ptr<Catalog> QuackAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
                                         AttachedDatabase &db, const string &name, AttachInfo &info,
+diff --git a/src/quack_client.cpp b/src/quack_client.cpp
+index 3ae9b19..13a24b2 100644
+--- a/src/quack_client.cpp
++++ b/src/quack_client.cpp
+@@ -7,3 +7,5 @@
+ #include "quack_client.hpp"
++#ifndef QUACK_CLIENT_ONLY_WASM
+ #include "quack_server.hpp"
++#endif
+ #include "quack_uri.hpp"
+@@ -41,2 +43,15 @@ static void LoadExtraHttpHeaders(optional_ptr<ClientContext> context, DatabaseIn
+ 
++#ifdef QUACK_CLIENT_ONLY_WASM
++static string LoadTokenFromSecret(ClientContext &context, const QuackUri &uri) {
++	auto &secret_manager = SecretManager::Get(context);
++	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
++	auto match = secret_manager.LookupSecret(transaction, uri.CanonicalUri(), "quack");
++	if (!match.HasMatch()) {
++		return "";
++	}
++	const auto &kv = dynamic_cast<const KeyValueSecret &>(*match.secret_entry->secret);
++	return kv.TryGetValue("token", true).ToString();
++}
++#endif
++
+ QuackClient::QuackClient(DatabaseInstance &db_p, const QuackUri &uri_p) : db(db_p), uri(uri_p) {
+@@ -190,3 +205,7 @@ shared_ptr<QuackClientConnection> QuackClient::ConnectToServer(ClientContext &co
+ 	if (token.empty()) {
++#ifdef QUACK_CLIENT_ONLY_WASM
++		token = LoadTokenFromSecret(context, uri);
++#else
+ 		token = QuackServer::TokenFromSecret(context, uri);
++#endif
+ 	}

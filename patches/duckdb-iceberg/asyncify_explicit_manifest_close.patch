@@ -1,8 +1,9 @@
 diff --git a/src/core/metadata/manifest/iceberg_manifest.cpp b/src/core/metadata/manifest/iceberg_manifest.cpp
 --- a/src/core/metadata/manifest/iceberg_manifest.cpp
 +++ b/src/core/metadata/manifest/iceberg_manifest.cpp
-@@ -1,6 +1,7 @@
+@@ -1,7 +1,8 @@
  #include "core/metadata/manifest/iceberg_manifest.hpp"
+ #include "core/metadata/manifest/iceberg_manifest_list.hpp"
  
  #include "duckdb/storage/caching_file_system.hpp"
 +#include "avro_copy.hpp"

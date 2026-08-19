@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/example-cloudflare-worker-iceberg",
-  "version": "1.5.3-dev.2",
+  "version": "1.5.5",
   "private": true,
   "type": "module",
   "scripts": {

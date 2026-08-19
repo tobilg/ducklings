@@ -6,15 +6,15 @@ DIST_DIR := dist
 
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
-DUCKDB_VERSION := v1.5.3
-DUCKDB_HTTPFS_VERSION := 53c5b032f6c368cfcc1a1ac3819118e86d3286a6
+DUCKDB_VERSION := v1.5.5
+DUCKDB_HTTPFS_VERSION := v1.5-variegata
 DUCKDB_ICEBERG_VERSION := v1.5-variegata
 DUCKDB_AVRO_VERSION := v1.5-variegata
 DUCKDB_QUACK_VERSION := v1.5-variegata
 DUCKDB_DUCKLAKE_VERSION := v1.5-variegata
-NANOARROW_VERSION := apache-arrow-nanoarrow-0.8.0
+NANOARROW_VERSION := apache-arrow-nanoarrow-0.9.0
 VCPKG_BASELINE := 84bab45d415d22042bd0b9081aea57f362da3f35
-VERSION_SUFFIX := -dev.2
+VERSION_SUFFIX :=
 NPM_VERSION := $(shell echo $(DUCKDB_VERSION) | sed 's/^v//')$(VERSION_SUFFIX)
 
 define find_files
