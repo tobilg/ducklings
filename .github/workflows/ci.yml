@@ -19,12 +19,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Setup Emscripten SDK
-        uses: mymindstorm/setup-emsdk@v14
+        uses: mymindstorm/setup-emsdk@v16
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: 'emsdk-cache'
@@ -41,14 +41,14 @@ jobs:
 
       - name: Cache vcpkg installed packages
         id: cache-vcpkg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vcpkg_installed
           key: vcpkg-wasm32-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg_ports/**') }}
 
       - name: Cache DuckDB build
         id: cache-duckdb
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             build/emscripten
@@ -57,7 +57,7 @@ jobs:
             duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Clean stale CMake cache
         run: |
@@ -85,7 +85,7 @@ jobs:
         run: make duckdb-workers-ducklake
 
       - name: Upload WASM artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wasm-artifacts
           path: |
@@ -105,19 +105,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: wasm-artifacts
           path: dist
@@ -135,7 +135,7 @@ jobs:
         run: pnpm --filter @ducklings/browser test
 
       - name: Upload browser dist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browser-dist
           path: packages/ducklings-browser/dist
@@ -149,19 +149,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: wasm-artifacts
           path: dist
@@ -179,7 +179,7 @@ jobs:
         run: pnpm --filter @ducklings/workers test
 
       - name: Upload workers dist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: workers-dist
           path: packages/ducklings-workers-iceberg/dist
@@ -193,19 +193,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: wasm-artifacts
           path: dist
@@ -223,7 +223,7 @@ jobs:
         run: pnpm --filter @ducklings/workers-ducklake test
 
       - name: Upload DuckLake workers dist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: workers-ducklake-dist
           path: packages/ducklings-workers-ducklake/dist
@@ -236,13 +236,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
