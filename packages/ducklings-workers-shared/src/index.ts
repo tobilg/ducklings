@@ -365,6 +365,16 @@ interface EmscriptenModule {
   HEAPU32: Uint32Array;
   HEAPF32: Float32Array;
   HEAPF64: Float64Array;
+  /**
+   * Emscripten's filesystem. The workers build exports it — `scripts/build-duckdb.sh`
+   * lists `FS` in `EXPORTED_RUNTIME_METHODS` for this target — which is what makes
+   * registering a file by name possible below.
+   */
+  FS: {
+    mkdir: (path: string) => void;
+    writeFile: (path: string, data: ArrayBuffer | Uint8Array) => void;
+    unlink: (path: string) => void;
+  };
 }
 
 // Module state
@@ -1838,6 +1848,60 @@ export class DuckDB {
    */
   static async create(config?: DuckDBConfig): Promise<DuckDB> {
     return new DuckDB(config);
+  }
+
+  /**
+   * Register an in-memory buffer as a file DuckDB can read by name.
+   *
+   * Useful when the bytes are already in hand — fetched from object storage through a
+   * platform binding, say — and there is no URL DuckDB could `httpfs` instead. Mirrors
+   * `registerFileBuffer` in `@ducklings/browser`, which has had this API all along.
+   *
+   * @param name - File name to register, optionally with directories
+   * @param buffer - The file's contents
+   *
+   * @example
+   * ```typescript
+   * await db.registerFileBuffer('data.csv', new TextEncoder().encode('id\n1\n'));
+   * const rows = await conn.query("SELECT * FROM read_csv('data.csv')");
+   * ```
+   */
+  async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+    const mod = getModule();
+    const parts = name.split('/').filter(Boolean);
+    let current = '';
+    for (const part of parts.slice(0, -1)) {
+      current += `/${part}`;
+      try {
+        mod.FS.mkdir(current);
+      } catch {
+        // The directory already exists, which is the state we want.
+      }
+    }
+    mod.FS.writeFile(`/${name}`, buffer);
+  }
+
+  /**
+   * Register text as a file, encoded as UTF-8.
+   *
+   * @param name - File name to register
+   * @param text - The file's contents
+   */
+  async registerFileText(name: string, text: string): Promise<void> {
+    await this.registerFileBuffer(name, new TextEncoder().encode(text));
+  }
+
+  /**
+   * Remove a file registered with {@link registerFileBuffer}.
+   *
+   * @param name - File name to remove
+   */
+  dropFile(name: string): void {
+    try {
+      getModule().FS.unlink(`/${name}`);
+    } catch {
+      // Nothing to remove is already the desired state.
+    }
   }
 
   connect(): Connection {
