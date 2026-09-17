@@ -374,6 +374,7 @@ interface EmscriptenModule {
     mkdir: (path: string) => void;
     writeFile: (path: string, data: ArrayBuffer | Uint8Array) => void;
     unlink: (path: string) => void;
+    readFile: (path: string, opts: { encoding: 'binary' }) => Uint8Array;
   };
 }
 
@@ -1889,6 +1890,26 @@ export class DuckDB {
    */
   async registerFileText(name: string, text: string): Promise<void> {
     await this.registerFileBuffer(name, new TextEncoder().encode(text));
+  }
+
+  /**
+   * Read a registered file back out as bytes.
+   *
+   * The mirror of {@link registerFileBuffer}, and how a query's output leaves the
+   * filesystem — `COPY (…) TO 'x.parquet'`, then this.
+   *
+   * @param name - File name to read
+   * @returns The file's contents
+   *
+   * @example
+   * ```typescript
+   * await conn.query("COPY (SELECT 42 AS answer) TO 'out.parquet' (FORMAT PARQUET)");
+   * const bytes = await db.copyFileToBuffer('out.parquet');
+   * ```
+   */
+  async copyFileToBuffer(name: string): Promise<Uint8Array> {
+    const data = getModule().FS.readFile(`/${name}`, { encoding: 'binary' });
+    return data instanceof Uint8Array ? data : new TextEncoder().encode(data);
   }
 
   /**
