@@ -197,7 +197,7 @@ Managed via `vcpkg.json` manifest. Cross-compiled for `wasm32-emscripten` during
 
 Key libraries: AWS SDK (SigV4 signing, S3), roaring (bitmap indexes), avro-c, curl, openssl, jansson, snappy, lzma, zlib.
 
-All variants share one `vcpkg_installed/` tree and pick their libraries at link time. Spatial's GEOS, PROJ, SQLite, and Expat come from the same manifest, using the overlay ports in `deps/duckdb-spatial/vcpkg_ports`; GDAL is the opt-in `spatial-gdal` manifest feature (`DUCKLINGS_SPATIAL_GDAL=1`).
+All variants share one `vcpkg_installed/` tree and pick their libraries at link time. Spatial's GEOS, PROJ, SQLite, and Expat come from the same manifest, using the overlay ports in `deps/duckdb-spatial/vcpkg_ports`. GDAL is not built.
 
 Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 

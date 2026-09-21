@@ -29,20 +29,6 @@
 			"version>=": "9.1.1"
 		}
 	],
-	"features": {
-		"spatial-gdal": {
-			"description": "GDAL readers for the Spatial Workers build (DUCKLINGS_SPATIAL_GDAL=1)",
-			"dependencies": [
-				{
-					"name": "gdal",
-					"version>=": "3.8.5",
-					"features": [
-						"geos"
-					]
-				}
-			]
-		}
-	},
 	"vcpkg-configuration": {
 		"overlay-ports": [
 			"./vcpkg_ports",

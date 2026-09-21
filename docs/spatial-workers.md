@@ -1,6 +1,6 @@
 # Spatial support for Cloudflare Workers
 
-The `@ducklings/workers-spatial` package statically links DuckDB spatial, Parquet, and httpfs with GEOS and PROJ. GDAL readers such as `ST_Read` and the lakehouse extensions are omitted by default. The package is private and is not published to npm.
+The `@ducklings/workers-spatial` package statically links DuckDB spatial, Parquet, and httpfs with GEOS and PROJ. GDAL readers such as `ST_Read` and the lakehouse extensions are omitted. The package is private and is not published to npm.
 
 ## Build
 
@@ -19,7 +19,7 @@ make check-worker-spatial-size
 pnpm --filter @ducklings/example-cloudflare-worker-spatial test
 ```
 
-The build downloads/builds pinned dependencies with vcpkg, applies the checked-in patches idempotently, and writes `dist/duckdb-workers-spatial.{js,wasm}`. Incremental builds reuse `build/emscripten-spatial/`. Set `DUCKLINGS_SPATIAL_GDAL=1` only if the additional size is acceptable for your target.
+The build downloads/builds pinned dependencies with vcpkg, applies the checked-in patches idempotently, and writes `dist/duckdb-workers-spatial.{js,wasm}`. Incremental builds reuse `build/emscripten-spatial/`.
 
 ## Usage
 
@@ -43,7 +43,7 @@ Use `prepareAsync()` when preparing statements against remote Parquet, and close
 
 ## Scope and checks
 
-- The no-GDAL build's local Worker bundle measured about 54.6 MiB; the included size check validates the configured uncompressed budget. Actual deployment limits must be checked for your account.
+- The local Worker bundle measured about 54.6 MiB; the included size check validates the configured uncompressed budget. Actual deployment limits must be checked for your account.
 - Wasm linear memory is capped at 96 MiB. DuckDB's memory limit does not cover every allocation or establish total Worker memory safety.
 - The native `ST_AsGeoJSON` patch copies each final string into result storage and resets temporary JSON arena allocations per row. This prevents temporary JSON trees accumulating across a vector.
 - Prepared-result cleanup now destroys native results on success and failure. HTTP transport preserves supplied headers and supports the scoped headers needed by remote Parquet reads.

@@ -370,7 +370,7 @@ if [ "$TARGET" = "workers" ]; then
     ASYNCIFY_REMOVE+="'*mbedtls*'"
     if [ "${EXTENSION_FLAVOR}" = "spatial" ] && [ "${DUCKLINGS_SPATIAL_ASYNCIFY_TRIM:-1}" = "1" ]; then
         # GEOS, SGL, and PROJ with networking disabled cannot suspend for HTTP.
-        # Keep GDAL and DuckDB's file readers instrumented: their VFS can yield.
+        # Keep DuckDB's file readers instrumented: their VFS can yield.
         ASYNCIFY_REMOVE+=",'*geos::*','GEOS*','*sgl::*','*osgeo::proj::*','proj_*','pj_*','geod_*'"
     fi
     ASYNCIFY_REMOVE+="]"
@@ -795,7 +795,7 @@ CMAKEEOF
             "-DVCPKG_MANIFEST_INSTALL=OFF"
             "-DSPATIAL_USE_NETWORK=OFF"
             "-DSPATIAL_USE_GEOS=ON"
-            "-DSPATIAL_USE_GDAL=${DUCKLINGS_SPATIAL_GDAL:-0}"
+            "-DSPATIAL_USE_GDAL=OFF"
         )
     fi
 
@@ -1027,11 +1027,6 @@ build_vcpkg_deps() {
 
     # One installation serves every variant; each variant selects its libraries at link time.
     local EXPECTED_LIBS="libroaring.a libavro.a libaws-cpp-sdk-core.a libssl.a libcrypto.a libcurl.a libjansson.a libgeos_c.a libgeos.a libproj.a libsqlite3.a libexpat.a"
-    local -a VCPKG_FEATURE_FLAGS=()
-    if [ "${EXTENSION_FLAVOR}" = "spatial" ] && [ "${DUCKLINGS_SPATIAL_GDAL:-0}" = "1" ]; then
-        EXPECTED_LIBS="${EXPECTED_LIBS} libgdal.a"
-        VCPKG_FEATURE_FLAGS=("--x-feature=spatial-gdal")
-    fi
 
     local MISSING_LIBS=false
     for lib in ${EXPECTED_LIBS}; do
@@ -1067,8 +1062,7 @@ build_vcpkg_deps() {
     log_info "Installing vcpkg packages for wasm32-emscripten (this may take a while)..."
     "${VCPKG_DIR}/vcpkg" install \
         --triplet wasm32-emscripten \
-        --x-manifest-root="${PROJECT_ROOT}" \
-        ${VCPKG_FEATURE_FLAGS[@]+"${VCPKG_FEATURE_FLAGS[@]}"}
+        --x-manifest-root="${PROJECT_ROOT}"
 
     cd "${PROJECT_ROOT}"
 
@@ -1447,9 +1441,6 @@ find_duckdb_libraries() {
         for lib in libgeos_c.a libgeos.a libproj.a libsqlite3.a libexpat.a; do
             LIBS="${LIBS} ${VCPKG_INSTALLED}/lib/${lib}"
         done
-        if [ "${DUCKLINGS_SPATIAL_GDAL:-0}" = "1" ]; then
-            LIBS="${LIBS} $(find "${VCPKG_INSTALLED}/lib" -name '*.a' -type f | sort | tr '\n' ' ')"
-        fi
     fi
 
     echo "${LIBS}"
@@ -1887,7 +1878,7 @@ print_summary() {
 
     echo ""
     if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
-        log_info "Built with static extensions: parquet, httpfs, spatial (GEOS + PROJ; GDAL=${DUCKLINGS_SPATIAL_GDAL:-0})"
+        log_info "Built with static extensions: parquet, httpfs, spatial (GEOS + PROJ)"
     elif [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
         log_info "Built with static extensions: httpfs, quack client, ducklake (WASM HTTP client)"
     else
