@@ -800,7 +800,7 @@ CMAKEEOF
     fi
 
     emcmake cmake "$DUCKDB_SRC" \
-        "${SPATIAL_CMAKE_FLAGS[@]}" \
+        ${SPATIAL_CMAKE_FLAGS[@]+"${SPATIAL_CMAKE_FLAGS[@]}"} \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHELL=OFF \
         -DBUILD_UNITTESTS=OFF \
@@ -1013,31 +1013,31 @@ build_arrow_ipc_insert() {
 build_vcpkg_deps() {
     log_info "Building vcpkg dependencies for wasm32-emscripten..."
 
-    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
-        # Reuse spatial's Wasm-tested dependency manifest and overlay ports.
-        # No AWS SDK, Iceberg, Avro, or DuckLake dependencies are installed.
-        local VCPKG_DIR="${PROJECT_ROOT}/build/vcpkg"
-        if [ ! -d "${VCPKG_DIR}/.git" ]; then
-            git clone https://github.com/microsoft/vcpkg.git "${VCPKG_DIR}"
+    # The wasm32-emscripten triplet and the Spatial CMake configure both need EMSCRIPTEN_ROOT
+    # to find cmake/Modules/Platform/Emscripten.cmake
+    if [ -z "${EMSCRIPTEN_ROOT:-}" ]; then
+        # Try em-config first (works with both emsdk and homebrew installs)
+        if command -v em-config &> /dev/null; then
+            export EMSCRIPTEN_ROOT="$(em-config EMSCRIPTEN_ROOT)"
+        elif [ -n "${EMSDK:-}" ]; then
+            export EMSCRIPTEN_ROOT="${EMSDK}/upstream/emscripten"
         fi
-        git -C "${VCPKG_DIR}" checkout "${VCPKG_BASELINE}"
-        if [ ! -x "${VCPKG_DIR}/vcpkg" ]; then
-            "${VCPKG_DIR}/bootstrap-vcpkg.sh" -disableMetrics
-        fi
-        export VCPKG_ROOT="${VCPKG_DIR}"
-        export EMSCRIPTEN_ROOT="$(em-config EMSCRIPTEN_ROOT)"
-        local MANIFEST_DIR="${BUILD_DIR}/vcpkg-manifest"
-        python3 "${PROJECT_ROOT}/scripts/spatial-vcpkg-manifest.py" \
-            "${SPATIAL_SRC}" "${MANIFEST_DIR}" "${DUCKLINGS_SPATIAL_GDAL:-0}"
-        "${VCPKG_DIR}/vcpkg" install \
-            --triplet wasm32-emscripten \
-            --x-manifest-root="${MANIFEST_DIR}" \
-            --x-install-root="${PROJECT_ROOT}/vcpkg_installed"
-        return
+    fi
+    log_info "EMSCRIPTEN_ROOT=${EMSCRIPTEN_ROOT}"
+
+    # One installation serves every variant; each variant selects its libraries at link time.
+    local EXPECTED_LIBS="libroaring.a libavro.a libaws-cpp-sdk-core.a libssl.a libcrypto.a libcurl.a libjansson.a libgeos_c.a libgeos.a libproj.a libsqlite3.a libexpat.a"
+    local -a VCPKG_FEATURE_FLAGS=()
+    if [ "${EXTENSION_FLAVOR}" = "spatial" ] && [ "${DUCKLINGS_SPATIAL_GDAL:-0}" = "1" ]; then
+        EXPECTED_LIBS="${EXPECTED_LIBS} libgdal.a"
+        VCPKG_FEATURE_FLAGS=("--x-feature=spatial-gdal")
     fi
 
-    # Check if already built
-    if [ -f "${VCPKG_INSTALLED}/lib/libroaring.a" ] && [ -f "${VCPKG_INSTALLED}/lib/libavro.a" ] && [ -f "${VCPKG_INSTALLED}/lib/libaws-cpp-sdk-core.a" ]; then
+    local MISSING_LIBS=false
+    for lib in ${EXPECTED_LIBS}; do
+        [ -f "${VCPKG_INSTALLED}/lib/${lib}" ] || MISSING_LIBS=true
+    done
+    if [ "${MISSING_LIBS}" = false ]; then
         log_info "vcpkg dependencies already built, skipping"
         return
     fi
@@ -1063,28 +1063,16 @@ build_vcpkg_deps() {
     # Set required env vars
     export VCPKG_ROOT="${VCPKG_DIR}"
 
-    # Set EMSCRIPTEN_ROOT for the wasm32-emscripten triplet
-    # The triplet needs this to find cmake/Modules/Platform/Emscripten.cmake
-    if [ -z "${EMSCRIPTEN_ROOT:-}" ]; then
-        # Try em-config first (works with both emsdk and homebrew installs)
-        if command -v em-config &> /dev/null; then
-            export EMSCRIPTEN_ROOT="$(em-config EMSCRIPTEN_ROOT)"
-        elif [ -n "${EMSDK:-}" ]; then
-            export EMSCRIPTEN_ROOT="${EMSDK}/upstream/emscripten"
-        fi
-    fi
-    log_info "EMSCRIPTEN_ROOT=${EMSCRIPTEN_ROOT}"
-
     # Install dependencies
     log_info "Installing vcpkg packages for wasm32-emscripten (this may take a while)..."
     "${VCPKG_DIR}/vcpkg" install \
         --triplet wasm32-emscripten \
-        --x-manifest-root="${PROJECT_ROOT}"
+        --x-manifest-root="${PROJECT_ROOT}" \
+        ${VCPKG_FEATURE_FLAGS[@]+"${VCPKG_FEATURE_FLAGS[@]}"}
 
     cd "${PROJECT_ROOT}"
 
     # Validate expected libraries exist
-    local EXPECTED_LIBS="libroaring.a libavro.a libaws-cpp-sdk-core.a libssl.a libcrypto.a libcurl.a libjansson.a"
     for lib in ${EXPECTED_LIBS}; do
         if [ ! -f "${VCPKG_INSTALLED}/lib/${lib}" ]; then
             log_error "Expected vcpkg library not found: ${VCPKG_INSTALLED}/lib/${lib}"
@@ -1456,7 +1444,12 @@ find_duckdb_libraries() {
         # Include the extension's own helper archives and static dependencies.
         # wasm-ld resolves archive references lazily across the full link.
         LIBS="${LIBS} $(find "${BUILD_DIR}/extension/spatial" -name '*.a' -type f | sort | tr '\n' ' ')"
-        LIBS="${LIBS} $(find "${VCPKG_INSTALLED}/lib" -name '*.a' -type f | sort | tr '\n' ' ')"
+        for lib in libgeos_c.a libgeos.a libproj.a libsqlite3.a libexpat.a; do
+            LIBS="${LIBS} ${VCPKG_INSTALLED}/lib/${lib}"
+        done
+        if [ "${DUCKLINGS_SPATIAL_GDAL:-0}" = "1" ]; then
+            LIBS="${LIBS} $(find "${VCPKG_INSTALLED}/lib" -name '*.a' -type f | sort | tr '\n' ' ')"
+        fi
     fi
 
     echo "${LIBS}"

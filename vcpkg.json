@@ -12,11 +12,41 @@
 				"sts",
 				"identity-management"
 			]
+		},
+		"zlib",
+		"geos",
+		"expat",
+		{
+			"name": "sqlite3",
+			"features": [
+				"rtree"
+			],
+			"default-features": false
+		},
+		{
+			"name": "proj",
+			"default-features": false,
+			"version>=": "9.1.1"
 		}
 	],
+	"features": {
+		"spatial-gdal": {
+			"description": "GDAL readers for the Spatial Workers build (DUCKLINGS_SPATIAL_GDAL=1)",
+			"dependencies": [
+				{
+					"name": "gdal",
+					"version>=": "3.8.5",
+					"features": [
+						"geos"
+					]
+				}
+			]
+		}
+	},
 	"vcpkg-configuration": {
 		"overlay-ports": [
-			"./vcpkg_ports"
+			"./vcpkg_ports",
+			"./deps/duckdb-spatial/vcpkg_ports"
 		],
 		"registries": [
 			{
