@@ -1851,6 +1851,13 @@ export class DuckDB {
     return new DuckDB(config);
   }
 
+  private getOpenModule(): EmscriptenModule {
+    if (this.closed) {
+      throw new DuckDBError('Database is closed');
+    }
+    return getModule();
+  }
+
   /**
    * Register an in-memory buffer as a file DuckDB can read by name.
    *
@@ -1868,7 +1875,7 @@ export class DuckDB {
    * ```
    */
   async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
-    const mod = getModule();
+    const mod = this.getOpenModule();
     const parts = name.split('/').filter(Boolean);
     let current = '';
     for (const part of parts.slice(0, -1)) {
@@ -1908,7 +1915,7 @@ export class DuckDB {
    * ```
    */
   async copyFileToBuffer(name: string): Promise<Uint8Array> {
-    const data = getModule().FS.readFile(`/${name}`, { encoding: 'binary' });
+    const data = this.getOpenModule().FS.readFile(`/${name}`, { encoding: 'binary' });
     return data instanceof Uint8Array ? data : new TextEncoder().encode(data);
   }
 
@@ -1917,9 +1924,10 @@ export class DuckDB {
    *
    * @param name - File name to remove
    */
-  dropFile(name: string): void {
+  async dropFile(name: string): Promise<void> {
+    const mod = this.getOpenModule();
     try {
-      getModule().FS.unlink(`/${name}`);
+      mod.FS.unlink(`/${name}`);
     } catch {
       // Nothing to remove is already the desired state.
     }
