@@ -1,0 +1,17 @@
+{
+  "name": "@ducklings/example-cloudflare-worker-spatial",
+  "version": "1.5.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node check-result-cleanup.mjs && node test.mjs",
+    "size": "bash ../../scripts/check-worker-size.sh ."
+  },
+  "dependencies": {
+    "@ducklings/workers-spatial": "workspace:*"
+  },
+  "devDependencies": {
+    "wrangler": "^4.71.0",
+    "esbuild": "0.27.3"
+  }
+}

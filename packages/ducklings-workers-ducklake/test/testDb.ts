@@ -26,7 +26,15 @@ try {
 const wasmBuffer = await readFile(wasmPath);
 const wasmModule = await WebAssembly.compile(wasmBuffer);
 
-await duckdb.init({ wasmModule });
+// httpFetch is fixed for the module lifetime, so tests swap the transport through this holder.
+export const httpTransport: { fetch: (url: string, init: RequestInit) => Promise<Response> } = {
+  fetch: (url, init) => fetch(url, init),
+};
+
+await duckdb.init({
+  wasmModule,
+  httpFetch: (url: string, init: RequestInit) => httpTransport.fetch(url, init),
+});
 
 // Re-export everything from the module
 export const DuckDB = duckdb.DuckDB;

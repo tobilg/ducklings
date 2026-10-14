@@ -59,6 +59,8 @@ SYNC_VERSION_FILES := \
 
 NATIVE_BUILD_SOURCES := \
 	scripts/build-duckdb.sh \
+	vcpkg.json \
+	$(call find_files,vcpkg_ports) \
 	$(call find_files,src) \
 	$(call find_files,patches) \
 	$(call find_files,deps/duckdb) \
@@ -67,6 +69,7 @@ NATIVE_BUILD_SOURCES := \
 	$(call find_files,deps/duckdb-avro) \
 	$(call find_files,deps/duckdb-quack) \
 	$(call find_files,deps/ducklake) \
+	$(call find_files,deps/duckdb-spatial/vcpkg_ports) \
 	$(call find_files,deps/nanoarrow)
 
 PNPM_MANIFESTS := $(wildcard package.json pnpm-lock.yaml pnpm-workspace.yaml)
@@ -294,3 +297,14 @@ help:
 	@echo "  make all             - Build everything"
 	@echo "  make duckdb-all      - Build browser and workers WASM"
 	@echo "  make typescript-all  - Build all TypeScript packages"
+
+# Spatial Worker build: full spatial, Parquet, and HTTP; no lakehouse extensions.
+.PHONY: duckdb-workers-spatial typescript-workers-spatial check-worker-spatial-size
+duckdb-workers-spatial:
+	./scripts/build-duckdb.sh workers-spatial
+
+typescript-workers-spatial:
+	pnpm --filter @ducklings/workers-spatial build
+
+check-worker-spatial-size:
+	bash scripts/check-worker-size.sh packages/example-cloudflare-worker-spatial

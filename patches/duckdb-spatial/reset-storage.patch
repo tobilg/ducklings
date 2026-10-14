@@ -1,0 +1,26 @@
+diff --git a/src/spatial/index/rtree/rtree_index.cpp b/src/spatial/index/rtree/rtree_index.cpp
+index 10dd9da..1607b7b 100644
+--- a/src/spatial/index/rtree/rtree_index.cpp
++++ b/src/spatial/index/rtree/rtree_index.cpp
+@@ -217,7 +217,7 @@ bool RTreeIndex::ShouldUseIndexScan(ClientContext &context, const RTreeBounds &q
+ 	return estimated_rows <= MaxValue(max_ratio * static_cast<double>(total_rows), static_cast<double>(min_rows));
+ }
+ 
+-void RTreeIndex::CommitDrop(IndexLock &index_lock) {
++void RTreeIndex::ResetStorage(IndexLock &index_lock) {
+ 	// TODO: Maybe we can drop these much earlier?
+ 	tree->Reset();
+ }
+diff --git a/src/spatial/index/rtree/rtree_index.hpp b/src/spatial/index/rtree/rtree_index.hpp
+index 39cedbe..29eb88f 100644
+--- a/src/spatial/index/rtree/rtree_index.hpp
++++ b/src/spatial/index/rtree/rtree_index.hpp
+@@ -53,7 +53,7 @@ public:
+ 	ErrorData Append(IndexLock &lock, DataChunk &entries, Vector &row_identifiers) override;
+ 
+ 	//! Deletes all data from the index. The lock obtained from InitializeLock must be held
+-	void CommitDrop(IndexLock &index_lock) override;
++	void ResetStorage(IndexLock &index_lock) override;
+ 	//! Delete a chunk of entries from the index. The lock obtained from InitializeLock must be held
+ 	void Delete(IndexLock &lock, DataChunk &entries, Vector &row_identifiers) override;
+ 	//! Insert a chunk of entries into the index

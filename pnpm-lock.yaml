@@ -125,6 +125,25 @@ importers:
         specifier: ^2.3.0
         version: 2.3.0
 
+  packages/ducklings-workers-spatial:
+    dependencies:
+      '@uwdata/flechette':
+        specifier: ^2.3.0
+        version: 2.3.0
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20260310.1
+        version: 4.20260310.1
+      '@types/node':
+        specifier: ^25.4.0
+        version: 25.4.0
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.8)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/example-browser:
     dependencies:
       '@ducklings/browser':
@@ -203,6 +222,19 @@ importers:
       vite:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@25.4.0)(yaml@2.8.2)
+      wrangler:
+        specifier: ^4.71.0
+        version: 4.71.0(@cloudflare/workers-types@4.20260310.1)
+
+  packages/example-cloudflare-worker-spatial:
+    dependencies:
+      '@ducklings/workers-spatial':
+        specifier: workspace:*
+        version: link:../ducklings-workers-spatial
+    devDependencies:
+      esbuild:
+        specifier: 0.27.3
+        version: 0.27.3
       wrangler:
         specifier: ^4.71.0
         version: 4.71.0(@cloudflare/workers-types@4.20260310.1)

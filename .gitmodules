@@ -25,3 +25,7 @@
 [submodule "deps/nanoarrow"]
 	path = deps/nanoarrow
 	url = https://github.com/apache/arrow-nanoarrow.git
+[submodule "deps/duckdb-spatial"]
+	path = deps/duckdb-spatial
+	url = https://github.com/duckdb/duckdb-spatial.git
+	branch = v1.5-variegata

@@ -4,16 +4,9 @@
 
 namespace duckdb {
 
-// WASM HTTP utility that uses XMLHttpRequest via Emscripten
-class HTTPWasmUtil : public HTTPUtil {
+// Keep httpfs settings and scoped secret lookup; replace only the transport.
+class HTTPWasmUtil : public HTTPFSUtil {
 public:
-    unique_ptr<HTTPParams> InitializeParameters(optional_ptr<FileOpener> opener,
-                                                optional_ptr<FileOpenerInfo> info) override {
-        auto result = make_uniq<HTTPFSParams>(*this);
-        result->Initialize(opener);
-        return result;
-    }
-
     unique_ptr<HTTPClient> InitializeClient(HTTPParams &http_params, const string &proto_host_port) override;
 
     string GetName() const override;

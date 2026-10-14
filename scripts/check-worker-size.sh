@@ -2,7 +2,6 @@
 set -euo pipefail
 
 PACKAGE_DIR="${1:-packages/example-cloudflare-worker-ducklake}"
-GZIP_LIMIT_KIB="${DUCKLINGS_WORKER_GZIP_LIMIT_KIB:-10188.8}"
 TOTAL_LIMIT_KIB="${DUCKLINGS_WORKER_TOTAL_LIMIT_KIB:-65536}"
 WRANGLER_LOG_PATH="${WRANGLER_LOG_PATH:-${TMPDIR:-/tmp}/ducklings-wrangler-logs}"
 
@@ -32,9 +31,5 @@ awk -v actual="${TOTAL_KIB}" -v limit="${TOTAL_LIMIT_KIB}" 'BEGIN { exit !(actua
     exit 1
 }
 
-awk -v actual="${GZIP_KIB}" -v limit="${GZIP_LIMIT_KIB}" 'BEGIN { exit !(actual <= limit) }' || {
-    echo "Worker gzip size ${GZIP_KIB} KiB exceeds ${GZIP_LIMIT_KIB} KiB" >&2
-    exit 1
-}
-
+# Since September 4, 2026, only the uncompressed 64 MiB limit applies.
 echo "Worker size OK: ${TOTAL_KIB} KiB total, ${GZIP_KIB} KiB gzip"

@@ -1,0 +1,2 @@
+# Unified patch context intentionally contains leading spaces and tabs.
+patches/duckdb-spatial/*.patch -whitespace

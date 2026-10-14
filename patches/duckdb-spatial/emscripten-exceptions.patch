@@ -1,0 +1,44 @@
+diff --git a/vcpkg_ports/geos/portfile.cmake b/vcpkg_ports/geos/portfile.cmake
+index c67c393..39ed441 100644
+--- a/vcpkg_ports/geos/portfile.cmake
++++ b/vcpkg_ports/geos/portfile.cmake
+@@ -8,9 +8,17 @@ vcpkg_from_github(
+     PATCHES fix-exported-config.patch
+ )
+ 
++# Emscripten disables C++ catch blocks by default. These libraries rely on
++# catching their own exceptions, including PROJ's nonnumeric CRS identifiers.
++set(DUCKLINGS_EXCEPTION_FLAGS)
++if(VCPKG_TARGET_IS_EMSCRIPTEN)
++    list(APPEND DUCKLINGS_EXCEPTION_FLAGS "-DCMAKE_CXX_FLAGS=-fexceptions")
++endif()
++
+ vcpkg_cmake_configure(
+     SOURCE_PATH "${SOURCE_PATH}"
+     OPTIONS
++        ${DUCKLINGS_EXCEPTION_FLAGS}
+         -DBUILD_ASTYLE=OFF
+         -DBUILD_DOCUMENTATION=OFF
+         -DBUILD_GEOSOP=OFF
+diff --git a/vcpkg_ports/proj/portfile.cmake b/vcpkg_ports/proj/portfile.cmake
+index f8d624d..b248351 100644
+--- a/vcpkg_ports/proj/portfile.cmake
++++ b/vcpkg_ports/proj/portfile.cmake
+@@ -27,9 +27,17 @@ endif()
+ 
+ find_program(EXE_SQLITE3 NAMES "sqlite3" PATHS "${CURRENT_HOST_INSTALLED_DIR}/tools" NO_DEFAULT_PATH REQUIRED)
+ 
++# Emscripten disables C++ catch blocks by default. These libraries rely on
++# catching their own exceptions, including PROJ's nonnumeric CRS identifiers.
++set(DUCKLINGS_EXCEPTION_FLAGS)
++if(VCPKG_TARGET_IS_EMSCRIPTEN)
++    list(APPEND DUCKLINGS_EXCEPTION_FLAGS "-DCMAKE_CXX_FLAGS=-fexceptions")
++endif()
++
+ vcpkg_cmake_configure(
+     SOURCE_PATH "${SOURCE_PATH}"
+     OPTIONS
++        ${DUCKLINGS_EXCEPTION_FLAGS}
+         ${FEATURE_OPTIONS}
+         -DNLOHMANN_JSON=external
+         -DBUILD_TESTING=OFF

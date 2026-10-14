@@ -231,15 +231,15 @@ public:
     bool use_sync_xhr;
 
     unique_ptr<HTTPResponse> Get(GetRequestInfo &info) override {
-        return DoRequest("GET", info.url, info.headers, nullptr, 0, info.content_handler);
+        return DoRequest("GET", info.url, RequestHeaders(info), nullptr, 0, info.content_handler);
     }
 
     unique_ptr<HTTPResponse> Head(HeadRequestInfo &info) override {
-        return DoHeadRequest(info.url, info.headers);
+        return DoHeadRequest(info.url, RequestHeaders(info));
     }
 
     unique_ptr<HTTPResponse> Post(PostRequestInfo &info) override {
-        auto result = DoRequest("POST", info.url, info.headers, info.buffer_in, info.buffer_in_len, nullptr);
+        auto result = DoRequest("POST", info.url, RequestHeaders(info), info.buffer_in, info.buffer_in_len, nullptr);
         if (result && result->status == HTTPStatusCode::OK_200) {
             info.buffer_out += result->body;
         }
@@ -247,14 +247,23 @@ public:
     }
 
     unique_ptr<HTTPResponse> Put(PutRequestInfo &info) override {
-        return DoRequest("PUT", info.url, info.headers, info.buffer_in, info.buffer_in_len, nullptr);
+        return DoRequest("PUT", info.url, RequestHeaders(info), info.buffer_in, info.buffer_in_len, nullptr);
     }
 
     unique_ptr<HTTPResponse> Delete(DeleteRequestInfo &info) override {
-        return DoRequest("DELETE", info.url, info.headers, nullptr, 0, nullptr);
+        return DoRequest("DELETE", info.url, RequestHeaders(info), nullptr, 0, nullptr);
     }
 
 private:
+    static HTTPHeaders RequestHeaders(BaseRequest &info) {
+        // httpfs sometimes merges scoped secret headers before signing a request.
+        // Otherwise the transport must add them, like the native httpfs clients.
+        if (info.params.Cast<HTTPFSParams>().pre_merged_headers) {
+            return info.headers;
+        }
+        return BaseRequest::MergeHeaders(info.headers, info.params);
+    }
+
     string NormalizeUrl(const string &url) {
         string path = url;
         if (path[0] == '/') {

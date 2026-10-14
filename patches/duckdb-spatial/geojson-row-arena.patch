@@ -1,0 +1,16 @@
+--- a/src/spatial/modules/main/spatial_functions_scalar.cpp
++++ b/src/spatial/modules/main/spatial_functions_scalar.cpp
+@@ -838,9 +838,10 @@
+ 
+ 			size_t json_size = 0;
+ 			char *json_data = yyjson_mut_write_opts(doc, 0, allocator.GetYYJSONAllocator(), &json_size, nullptr);
+-			// Because the arena allocator only resets after each pipeline invocation, we can safely just point into the
+-			// arena here without needing to copy the data to the string heap with StringVector::AddString
+-			return string_t {json_data, static_cast<uint32_t>(json_size)};
++			// Keep only the finished string; release each geometry's temporary JSON tree.
++			const auto output = StringVector::AddString(result, json_data, json_size);
++			allocator.Reset();
++			return output;
+ 		});
+ 	}
+ 

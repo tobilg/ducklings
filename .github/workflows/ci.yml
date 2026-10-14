@@ -15,13 +15,16 @@ jobs:
   # Build WASM (browser and workers)
   build-wasm:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           submodules: recursive
+
+      - name: Check dependency build ordering and cache reuse
+        run: python3 scripts/test-build-dependencies.py
 
       - name: Setup Emscripten SDK
         uses: mymindstorm/setup-emsdk@v16
@@ -44,7 +47,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: vcpkg_installed
-          key: vcpkg-wasm32-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg_ports/**') }}
+          key: vcpkg-wasm32-v2-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('vcpkg.json', 'vcpkg_ports/**', 'deps/duckdb-spatial/vcpkg_ports/**', 'patches/duckdb-spatial/**', 'scripts/build-duckdb.sh') }}
 
       - name: Cache DuckDB build
         id: cache-duckdb
@@ -52,7 +55,8 @@ jobs:
         with:
           path: |
             build/emscripten
-          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**', 'vcpkg.json', 'vcpkg_ports/**') }}
+            build/emscripten-spatial
+          key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**', 'vcpkg.json', 'vcpkg_ports/**', 'deps/duckdb-spatial/vcpkg_ports/**') }}
           restore-keys: |
             duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
 
@@ -64,6 +68,7 @@ jobs:
           # CMake cache contains hardcoded Emscripten paths that change each run
           # Remove cache files but keep compiled objects to speed up rebuilds
           rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
+          rm -rf build/emscripten-spatial/CMakeCache.txt build/emscripten-spatial/CMakeFiles
 
       - name: Build browser WASM
         run: make duckdb-browser
@@ -84,6 +89,9 @@ jobs:
       - name: Build DuckLake workers WASM
         run: make duckdb-workers-ducklake
 
+      - name: Build Spatial workers WASM
+        run: make duckdb-workers-spatial
+
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -95,6 +103,8 @@ jobs:
             dist/duckdb-workers.wasm
             dist/duckdb-workers-ducklake.js
             dist/duckdb-workers-ducklake.wasm
+            dist/duckdb-workers-spatial.js
+            dist/duckdb-workers-spatial.wasm
           retention-days: 7
 
   # Build/test browser package
@@ -228,6 +238,46 @@ jobs:
           name: workers-ducklake-dist
           path: packages/ducklings-workers-ducklake/dist
           retention-days: 7
+
+  # Build/test Spatial workers package
+  workers-spatial:
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-artifacts
+          path: dist
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @ducklings/workers-spatial build
+
+      - name: Type check
+        run: pnpm --filter @ducklings/workers-spatial typecheck
+
+      - name: Check Worker bundle size
+        run: make check-worker-spatial-size
+
+      - name: Integration test (workerd)
+        run: pnpm --filter @ducklings/example-cloudflare-worker-spatial test
 
   # Lint check
   lint:
