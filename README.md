@@ -9,9 +9,12 @@ A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 | Package | Description | Install |
 |---------|-------------|---------|
 | [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) | Browser version (async API) | `npm install @ducklings/browser` |
-| [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers version with Iceberg (async API) | `npm install @ducklings/workers` |
+| [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers with httpfs and Parquet (async API) | `npm install @ducklings/workers` |
+| [`@ducklings/workers-iceberg`](https://www.npmjs.com/package/@ducklings/workers-iceberg) | Cloudflare Workers with httpfs, Parquet, Avro, and Iceberg | `npm install @ducklings/workers-iceberg` |
 | [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake) | Cloudflare Workers version with DuckLake (async API) | `npm install @ducklings/workers-ducklake` |
-| `@ducklings/workers-spatial` | Cloudflare Workers build with Spatial, Parquet, and httpfs | Build from source |
+| [`@ducklings/workers-spatial`](https://www.npmjs.com/package/@ducklings/workers-spatial) | Cloudflare Workers build with Spatial, Parquet, and httpfs | `npm install @ducklings/workers-spatial` |
+
+`@ducklings/workers` bundles only httpfs and Parquet. `@ducklings/workers-iceberg` adds Avro and Iceberg while keeping the same TypeScript API. Starting with 1.5.6, applications using Avro or Iceberg must use `@ducklings/workers-iceberg`, including its `/wasm` and `/vite-plugin` imports.
 
 The spatial package statically links DuckDB Spatial with GEOS and PROJ and omits GDAL to keep the Worker bundle under Cloudflare's size limit. See [Spatial support for Cloudflare Workers](docs/spatial-workers.md) for build instructions, usage, and limitations.
 
@@ -25,7 +28,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 
 ## Features
 
-- **Minimal footprint**: ~6.3 MiB (browser) / ~10 MiB (workers), gzipped (optimized with -Oz, LTO, wasm-opt)
+- **Minimal footprint**: Optimized WASM builds; size depends on the bundled extensions (optimized with -Oz, LTO, wasm-opt)
 - **TypeScript API**: Full TypeScript support with type definitions
 - **Prepared statements**: Secure parameterized queries with full type support
 - **Streaming results**: Memory-efficient chunked data processing
@@ -34,19 +37,20 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 - **Parquet support**: Read Parquet files with built-in extension
 - **httpfs support**: Load remote files via HTTP/HTTPS
 - **JSON support**: Not bundled in the published browser or workers packages to keep builds small; use a custom build if you need DuckDB's `json` extension
-- **Cloudflare Workers**: First-class support with dedicated Iceberg and DuckLake async packages
+- **Cloudflare Workers**: First-class support with dedicated Iceberg, DuckLake, and Spatial async packages
 - **Browser support**: Works in modern browsers with ES modules
 
 ## Extension Availability
 
-| Extension / Feature | `@ducklings/browser` | `@ducklings/workers` | `@ducklings/workers-ducklake` |
-|---------------------|----------------------|----------------------|-------------------------------|
-| `parquet` | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| `httpfs` | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| `avro` | :white_check_mark: | :white_check_mark: | :x: |
-| `iceberg` | :white_check_mark: | :white_check_mark: | :x: |
-| `ducklake` | :x: | :x: | :white_check_mark: |
-| `json` | Default build: :x: | Default build: :x: | Default build: :x: |
+| Extension / Feature | `@ducklings/browser` | `@ducklings/workers` | `@ducklings/workers-iceberg` | `@ducklings/workers-ducklake` | `@ducklings/workers-spatial` |
+|---------------------|---------------------|---------------------|----------------------------|-----------------------------|----------------------------|
+| `parquet` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| `httpfs` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| `avro` | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: |
+| `iceberg` | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: |
+| `ducklake` | :x: | :x: | :x: | :white_check_mark: | :x: |
+| `spatial` | :x: | :x: | :x: | :x: | :white_check_mark: |
+| `json` | :x: | :x: | :x: | :x: | :x: |
 
 The published browser and workers packages do not bundle DuckDB's `json` extension to keep builds small. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
 
@@ -134,7 +138,8 @@ export default {
 | Package | API Style | Size (gzipped) | Extension focus |
 |---------|-----------|----------------|-----------------|
 | `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | Browser + Iceberg |
-| `@ducklings/workers` | Async (Asyncify) | ~9.7 MiB | Workers + Iceberg |
+| `@ducklings/workers` | Async (Asyncify) | ~9.3 MiB | httpfs + Parquet |
+| `@ducklings/workers-iceberg` | Async (Asyncify) | ~10 MiB | httpfs + Parquet + Avro + Iceberg |
 | `@ducklings/workers-ducklake` | Async (Asyncify) | Measured during build | Workers + DuckLake |
 
 #### Arrow IPC Endpoint
@@ -590,7 +595,7 @@ The WASM binary is optimized for size using:
 - **wasm-opt**: Binaryen post-processing with `-Oz --converge`
 - **Reduced exports**: Only 59 essential C functions exported
 
-Result: **~6.3 MiB gzipped** for browser and **~10 MiB gzipped / ~40 MiB uncompressed** for Workers. Neither Workers package bundles the JSON extension. Cloudflare permits [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Use `wrangler deploy --dry-run --outdir bundled` to check the final `Total Upload`, or run `bash scripts/check-worker-size.sh <example-package-directory>` after building the example. The script defaults to 65,536 KiB uncompressed; `DUCKLINGS_WORKER_TOTAL_LIMIT_KIB` overrides that budget, and `DUCKLINGS_WORKER_GZIP_LIMIT_KIB` enables an optional gzip budget. Browser static assets retain a separate 25 MiB per-file limit.
+WASM size depends on the package: the base Workers build omits Avro and Iceberg, while the Iceberg build includes them. None of the published packages bundles the JSON extension. Cloudflare permits [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Use `wrangler deploy --dry-run --outdir bundled` to check the final `Total Upload`, or run `bash scripts/check-worker-size.sh <example-package-directory>` after building the example. The script defaults to 65,536 KiB uncompressed; `DUCKLINGS_WORKER_TOTAL_LIMIT_KIB` overrides that budget, and `DUCKLINGS_WORKER_GZIP_LIMIT_KIB` enables an optional gzip budget. Browser static assets retain a separate 25 MiB per-file limit.
 
 ## Development
 
@@ -624,15 +629,17 @@ make all
 # Build both browser and workers WASM
 make duckdb-all
 
-# Build both TypeScript packages
+# Build browser, base Workers, Iceberg, and DuckLake TypeScript packages
 make typescript-all
 
 # Individual steps
 make duckdb-browser     # Compile browser WASM (~2 min)
-make duckdb-workers     # Compile Iceberg workers WASM with Asyncify
+make duckdb-workers     # Compile httpfs/Parquet workers WASM with Asyncify
+make duckdb-workers-iceberg # Compile workers WASM with Avro and Iceberg
 make duckdb-workers-ducklake # Compile DuckLake workers WASM with Asyncify
 make typescript-browser # Build @ducklings/browser package
 make typescript-workers # Build @ducklings/workers package
+make typescript-workers-iceberg # Build @ducklings/workers-iceberg package
 make typescript-workers-ducklake # Build @ducklings/workers-ducklake package
 
 # Clean and rebuild
@@ -648,7 +655,9 @@ Makefile: DUCKDB_VERSION := v1.5.6
                 ↓
     @ducklings/browser@1.5.6
     @ducklings/workers@1.5.6
+    @ducklings/workers-iceberg@1.5.6
     @ducklings/workers-ducklake@1.5.6
+    @ducklings/workers-spatial@1.5.6
 ```
 
 To update the version, change `DUCKDB_VERSION` in the Makefile. The version is automatically synced to package manifests during the build process via `make sync-versions`.
@@ -694,6 +703,8 @@ npm install @ducklings/browser@dev
 
 #### Release Process
 
+All five packages use npm trusted publishing. Complete the [npm setup and initial Spatial/Iceberg publications](docs/publishing.md) before running a publishing release; no `NPM_TOKEN` is used by the workflow. Dry runs upload tested Spatial and Iceberg npm tarballs for their first publications.
+
 **Stable release (new DuckDB version):**
 
 1. Update `DUCKDB_VERSION` in Makefile:
@@ -712,13 +723,17 @@ npm install @ducklings/browser@dev
 
    Skip the reverse-patch command on a clean checkout. Preserve any intentional source edits before switching versions. To also update the extension branches, use `make pin-versions`; it fast-forwards every configured dependency branch.
 
-3. Rebuild and validate all three variants:
+3. Rebuild and validate all five variants:
    ```bash
-   rm -rf build/emscripten dist
+   rm -rf build/emscripten build/emscripten-spatial dist
    make duckdb-all
+   make duckdb-workers-spatial
    make typescript-all
-   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-ducklake typecheck
-   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-ducklake test
+   make typescript-workers-spatial
+   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake --filter @ducklings/workers-spatial -r typecheck
+   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake -r test
+   make check-worker-spatial-size
+   pnpm --filter @ducklings/example-cloudflare-worker-spatial test
    ```
 
    The tests check that both the API and SQL report the DuckDB version configured in the Makefile. Also smoke-test remote data access and check the final browser and Worker bundle sizes before releasing.
@@ -783,7 +798,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 │   ├── duckdb.js       │               │               │   ├── duckdb-workers  │
 │   └── duckdb.wasm     │               │               │   │   .js             │
 │      (~6.3MiB gz)     │               │               │   └── duckdb-workers  │
-└───────────┬───────────┘               │               │       .wasm (~9.7MB)  │
+└───────────┬───────────┘               │               │       .wasm (base)    │
             │                           │               └───────────┬───────────┘
             │                           │                           │
             ▼                           │                           ▼
@@ -811,8 +826,10 @@ ducklings/
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM (~6.3 MiB gzipped)
-│   ├── duckdb-workers.js          # Iceberg Workers JS glue (with Asyncify)
-│   ├── duckdb-workers.wasm        # Iceberg Workers WASM (~9.7 MiB gzipped)
+│   ├── duckdb-workers.js          # Base Workers JS glue (with Asyncify)
+│   ├── duckdb-workers.wasm        # Base Workers WASM (httpfs + Parquet)
+│   ├── duckdb-workers-iceberg.js  # Iceberg Workers JS glue
+│   ├── duckdb-workers-iceberg.wasm # Iceberg Workers WASM
 │   ├── duckdb-workers-ducklake.js # DuckLake Workers JS glue (with Asyncify)
 │   └── duckdb-workers-ducklake.wasm # DuckLake Workers WASM
 ├── packages/
@@ -822,7 +839,8 @@ ducklings/
 │   │       ├── index.js           # ESM bundle
 │   │       └── wasm/              # WASM files
 │   ├── ducklings-workers-shared/  # Shared Workers API implementation
-│   ├── ducklings-workers-iceberg/ # @ducklings/workers (npm)
+│   ├── ducklings-workers/         # @ducklings/workers (npm; default)
+│   ├── ducklings-workers-iceberg/ # @ducklings/workers-iceberg (npm)
 │   │   ├── src/index.ts           # Iceberg Workers package entry
 │   │   └── dist/                  # Built package
 │   │       ├── index.js           # ESM bundle
@@ -859,7 +877,7 @@ ducklings/
 │  Type marshalling, memory management, HEAP access               │
 ├─────────────────────────────────┬───────────────────────────────┤
 │  @ducklings/browser             │   @ducklings/workers          │
-│  Browser WASM (~6.3MiB gz)      │   Workers WASM (~9.7MiB gz)   │
+│  Browser WASM (~6.3MiB gz)      │   Workers WASM (base)        │
 │  - Web Worker + XMLHttpRequest  │   - Asyncify + fetch()        │
 │  - Async API (Promises)         │   - Async API (Promises)      │
 └─────────────────────────────────┴───────────────────────────────┘
@@ -871,7 +889,7 @@ ducklings/
 2. **No file system**: In-memory databases only (use httpfs for remote files)
 3. **No threads**: Single-threaded execution
 4. **WASM_BIGINT=0**: 64-bit integers passed as two 32-bit values (handled internally)
-5. **No dynamic extension loading**: Only statically compiled extensions are available. The default browser and workers builds ship with Parquet, httpfs, Avro, and Iceberg, but not JSON. `INSTALL`/`LOAD` commands for other extensions will not work. Dynamic loading requires Emscripten's `-sMAIN_MODULE` flag which significantly increases binary size (~2-3x)
+5. **No dynamic extension loading**: Only statically compiled extensions are available. The default Workers build includes Parquet and httpfs. The browser and Workers Iceberg builds additionally include Avro and Iceberg. None includes JSON. `INSTALL`/`LOAD` commands for other extensions will not work. Dynamic loading requires Emscripten's `-sMAIN_MODULE` flag which significantly increases binary size (~2-3x)
 
 ## License
 

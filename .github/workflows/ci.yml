@@ -83,8 +83,11 @@ jobs:
             exit 1
           fi
 
-      - name: Build Iceberg workers WASM
+      - name: Build base workers WASM
         run: make duckdb-workers
+
+      - name: Build Iceberg workers WASM
+        run: make duckdb-workers-iceberg
 
       - name: Build DuckLake workers WASM
         run: make duckdb-workers-ducklake
@@ -101,6 +104,8 @@ jobs:
             dist/duckdb.wasm
             dist/duckdb-workers.js
             dist/duckdb-workers.wasm
+            dist/duckdb-workers-iceberg.js
+            dist/duckdb-workers-iceberg.wasm
             dist/duckdb-workers-ducklake.js
             dist/duckdb-workers-ducklake.wasm
             dist/duckdb-workers-spatial.js
@@ -151,7 +156,7 @@ jobs:
           path: packages/ducklings-browser/dist
           retention-days: 7
 
-  # Build/test workers package
+  # Build/test default and Iceberg Workers packages with separate WASM artifacts
   workers:
     runs-on: ubuntu-latest
     needs: build-wasm
@@ -180,18 +185,28 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        run: pnpm --filter @ducklings/workers build
+        run: pnpm --filter @ducklings/workers --filter @ducklings/workers-iceberg -r build
 
       - name: Type check
-        run: pnpm --filter @ducklings/workers typecheck
+        run: pnpm --filter @ducklings/workers --filter @ducklings/workers-iceberg -r typecheck
 
       - name: Test
-        run: pnpm --filter @ducklings/workers test
+        run: pnpm --filter @ducklings/workers --filter @ducklings/workers-iceberg -r test
+
+      - name: Build default and Iceberg examples
+        run: pnpm --filter @ducklings/example-cloudflare-worker --filter @ducklings/example-cloudflare-worker-iceberg -r build
 
       - name: Upload workers dist
         uses: actions/upload-artifact@v7
         with:
           name: workers-dist
+          path: packages/ducklings-workers/dist
+          retention-days: 7
+
+      - name: Upload Iceberg workers dist
+        uses: actions/upload-artifact@v7
+        with:
+          name: workers-iceberg-dist
           path: packages/ducklings-workers-iceberg/dist
           retention-days: 7
 
@@ -303,8 +318,11 @@ jobs:
       - name: Lint browser package
         run: pnpm --filter @ducklings/browser lint || true
 
-      - name: Lint workers package
+      - name: Lint default workers package
         run: pnpm --filter @ducklings/workers lint || true
+
+      - name: Lint Iceberg workers package
+        run: pnpm --filter @ducklings/workers-iceberg lint || true
 
       - name: Lint DuckLake workers package
         run: pnpm --filter @ducklings/workers-ducklake lint || true

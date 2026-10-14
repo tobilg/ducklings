@@ -7,7 +7,8 @@ A minimal DuckDB WASM binding for browsers and Cloudflare Workers.
 | Package | Environment | API Style |
 |---------|-------------|-----------|
 | [@ducklings/browser](https://www.npmjs.com/package/@ducklings/browser) | Browsers | Asynchronous (Web Worker) |
-| [@ducklings/workers](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers with Iceberg* | Asynchronous (Asyncify) |
+| [@ducklings/workers](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers with httpfs and Parquet* | Asynchronous (Asyncify) |
+| [@ducklings/workers-iceberg](https://www.npmjs.com/package/@ducklings/workers-iceberg) | Cloudflare Workers with httpfs, Parquet, Avro, and Iceberg* | Asynchronous (Asyncify) |
 | [@ducklings/workers-ducklake](https://www.npmjs.com/package/@ducklings/workers-ducklake) | Cloudflare Workers with DuckLake* | Asynchronous (Asyncify) |
 
 All packages provide the same async API, but use different mechanisms and bundled extensions under the hood.
@@ -24,6 +25,9 @@ npm install @ducklings/browser
 
 # For Cloudflare Workers
 npm install @ducklings/workers
+
+# For the explicit Iceberg package
+npm install @ducklings/workers-iceberg
 
 # For Cloudflare Workers with DuckLake
 npm install @ducklings/workers-ducklake
@@ -86,7 +90,7 @@ const results = await stmt.run();
 
 ## Features
 
-- **Minimal footprint**: ~6.3 MiB (browser) / ~10 MiB (workers), gzipped
+- **Minimal footprint**: Optimized WASM builds; size depends on the bundled extensions
 - **TypeScript**: Full type definitions included
 - **Prepared statements**: Secure parameterized queries
 - **Streaming results**: Memory-efficient chunked processing
@@ -102,4 +106,5 @@ const results = await stmt.run();
 - [GitHub Repository](https://github.com/tobilg/ducklings)
 - [@ducklings/browser on npm](https://www.npmjs.com/package/@ducklings/browser)
 - [@ducklings/workers on npm](https://www.npmjs.com/package/@ducklings/workers)
+- [@ducklings/workers-iceberg on npm](https://www.npmjs.com/package/@ducklings/workers-iceberg)
 - [@ducklings/workers-ducklake on npm](https://www.npmjs.com/package/@ducklings/workers-ducklake)

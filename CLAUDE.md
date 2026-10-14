@@ -12,15 +12,19 @@ A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 
 ## Packages
 
-The project publishes three npm packages:
+The project publishes five npm packages:
 
 | Package | Description | API Style |
 |---------|-------------|-----------|
 | `@ducklings/browser` | Browser version | Sync |
-| `@ducklings/workers` | Cloudflare Workers version with Iceberg | Async (Promises) |
+| `@ducklings/workers` | Default Cloudflare Workers package with httpfs and Parquet | Async (Promises) |
+| `@ducklings/workers-iceberg` | Workers with httpfs, Parquet, Avro, and Iceberg | Async (Promises) |
 | `@ducklings/workers-ducklake` | Cloudflare Workers version with DuckLake | Async (Promises) |
+| `@ducklings/workers-spatial` | Cloudflare Workers version with Spatial, GEOS, and PROJ | Async (Promises) |
 
-**Why two packages?** Cloudflare Workers doesn't support synchronous XMLHttpRequest. The workers package uses Emscripten's Asyncify to enable async `fetch()` calls, making httpfs work properly.
+`@ducklings/workers` and `@ducklings/workers-iceberg` are separate published packages. Keep generic examples on `@ducklings/workers` and Iceberg-specific examples on `@ducklings/workers-iceberg`. Both use the shared Workers API, but their native artifacts differ: `dist/duckdb-workers.{js,wasm}` bundles only httpfs and Parquet, and `dist/duckdb-workers-iceberg.{js,wasm}` additionally bundles Avro and Iceberg. Keep the build targets, package copy steps, and Vite plugin resolution separate. Never substitute one artifact for the other.
+
+**Why separate browser and Workers packages?** Cloudflare Workers doesn't support synchronous XMLHttpRequest. The workers package uses Emscripten's Asyncify to enable async `fetch()` calls, making httpfs work properly.
 
 ## Project Structure
 
@@ -36,8 +40,10 @@ ducklings/
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM binary
-│   ├── duckdb-workers.js          # Iceberg Workers JS glue (Asyncify)
-│   ├── duckdb-workers.wasm        # Iceberg Workers WASM binary
+│   ├── duckdb-workers.js          # Base Workers JS glue (Asyncify)
+│   ├── duckdb-workers.wasm        # Base Workers WASM (httpfs + Parquet)
+│   ├── duckdb-workers-iceberg.js  # Iceberg Workers JS glue
+│   ├── duckdb-workers-iceberg.wasm # Iceberg Workers WASM binary
 │   ├── duckdb-workers-ducklake.js # DuckLake Workers JS glue (Asyncify)
 │   └── duckdb-workers-ducklake.wasm # DuckLake Workers WASM binary
 ├── vcpkg.json                     # vcpkg manifest (iceberg/avro C deps)
@@ -51,7 +57,8 @@ ducklings/
 │       └── preloaded_extensions.patch # Makes DuckDB recognize static extensions as preloaded
 ├── packages/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
-│   ├── ducklings-workers-iceberg/ # @ducklings/workers (npm)
+│   ├── ducklings-workers/         # @ducklings/workers (npm; default)
+│   ├── ducklings-workers-iceberg/ # @ducklings/workers-iceberg (npm)
 │   ├── ducklings-workers-ducklake/ # @ducklings/workers-ducklake (npm)
 │   ├── example-browser/           # Browser example (private)
 │   └── example-cloudflare-worker/ # CF Workers example (private)
@@ -80,15 +87,17 @@ make all                  # Build browser WASM + TypeScript package
 
 # WASM compilation (requires Emscripten)
 make duckdb-browser       # Compile browser WASM (~2 min)
-make duckdb-workers       # Compile Iceberg workers WASM with Asyncify
+make duckdb-workers       # Compile httpfs/Parquet workers WASM with Asyncify
+make duckdb-workers-iceberg # Compile workers WASM with Avro and Iceberg
 make duckdb-workers-ducklake # Compile DuckLake workers WASM with Asyncify
-make duckdb-all           # Build both WASM variants
+make duckdb-all           # Build browser, base Workers, Iceberg, and DuckLake WASM
 
 # TypeScript packages
 make typescript-browser   # Build @ducklings/browser package
 make typescript-workers   # Build @ducklings/workers package
+make typescript-workers-iceberg # Build @ducklings/workers-iceberg package
 make typescript-workers-ducklake # Build @ducklings/workers-ducklake package
-make typescript-all       # Build both packages
+make typescript-all       # Build browser, base Workers, Iceberg, and DuckLake packages
 
 # Utilities
 make deps                 # Initialize git submodules
@@ -129,7 +138,8 @@ Checked against the [general Workers limits](https://developers.cloudflare.com/w
 
 - `packages/ducklings-browser/src/index.ts` - Browser API (sync)
 - `packages/ducklings-workers-shared/src/index.ts` - Shared Workers API implementation
-- `packages/ducklings-workers-iceberg/src/index.ts` - @ducklings/workers package entry
+- `packages/ducklings-workers/src/index.ts` - @ducklings/workers package entry
+- `packages/ducklings-workers-iceberg/src/index.ts` - @ducklings/workers-iceberg package entry
 - `packages/ducklings-workers-ducklake/src/index.ts` - @ducklings/workers-ducklake package entry
 
 Both packages export:
@@ -144,7 +154,7 @@ Both packages export:
 
 - `scripts/build-duckdb.sh` - Main build script
 - Uses Emscripten with -Oz optimization, LTO, wasm-opt
-- Extensions built-in: Parquet, httpfs, plus either Avro/Iceberg or DuckLake depending on Workers flavor
+- Extensions built-in: Parquet and httpfs in the base Workers build; Avro/Iceberg, DuckLake, or Spatial are added only in their respective Workers flavors
 - Workers build adds `-sASYNCIFY` for async fetch support
 - vcpkg provides C/C++ dependencies (AWS SDK, roaring, avro-c, curl, openssl, etc.)
 
@@ -193,13 +203,13 @@ Jobs:
 Triggers: tag push (`v*`), manual dispatch
 
 Steps:
-1. Build WASM (browser + workers)
-2. Build TypeScript packages
-3. Set package versions from tag
-4. Publish to npm (both packages)
-5. Create GitHub release with WASM binaries
+1. Build WASM (browser, base Workers, Iceberg, DuckLake, and Spatial)
+2. Set package versions and build/test TypeScript packages
+3. Check Spatial's Worker size and local workerd integration
+4. Publish all five packages to npm through trusted publishing (OIDC)
+5. Create GitHub release with all five WASM binaries
 
-Required secret: `NPM_TOKEN`
+Publishing jobs require `id-token: write`, npm 11, and a trusted publisher configured on each npm package for `tobilg/ducklings` and `release.yml`, with direct `npm publish` allowed. No `NPM_TOKEN` is used. If Spatial or the additional Iceberg package does not yet exist on npm, publish it once with ordinary npm authentication before configuring OIDC; the dry-run workflow uploads tested default Workers, Iceberg, and Spatial tarballs. See [publishing setup](docs/publishing.md).
 
 ## Dependencies
 
@@ -230,7 +240,7 @@ Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 ## API Differences
 
-| Feature | Browser (`@ducklings/browser`) | Workers Iceberg (`@ducklings/workers`) | Workers DuckLake (`@ducklings/workers-ducklake`) |
+| Feature | Browser (`@ducklings/browser`) | Base Workers (`@ducklings/workers`) | Workers DuckLake (`@ducklings/workers-ducklake`) |
 |---------|------------------------------|----------------------------------------|-----------------------------------------------|
 | `init()` | `await init()` or `init(wasmUrl)` | `await init({ wasmModule })` | `await init({ wasmModule })` |
 | `query()` | Returns `T[]` (sync) | Returns `Promise<T[]>` (async) | Returns `Promise<T[]>` (async) |
@@ -250,7 +260,7 @@ Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 ### No Dynamic Extension Loading
 
-Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions are available: browser/Workers Iceberg builds include Parquet, httpfs, Avro, and Iceberg; the Workers DuckLake build includes Parquet, httpfs, and DuckLake. The published default builds omit JSON.
+Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions are available: base Workers includes Parquet and httpfs; browser/Workers Iceberg builds include Parquet, httpfs, Avro, and Iceberg; the Workers DuckLake build includes Parquet, httpfs, and DuckLake. The published default builds omit JSON.
 
 **Why?** Dynamic extension loading in WASM requires Emscripten's `-sMAIN_MODULE` flag, which significantly increases binary size (~2-3x). This conflicts with the project's goal of minimal footprint.
 

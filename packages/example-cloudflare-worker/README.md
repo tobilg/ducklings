@@ -1,6 +1,6 @@
 # Ducklings - Cloudflare Worker Example
 
-This example demonstrates using DuckDB WASM in a Cloudflare Worker to provide a SQL query API endpoint.
+This example uses `@ducklings/workers` with httpfs and Parquet to provide a SQL query API endpoint. For Avro or Iceberg, use the [Iceberg example](../example-cloudflare-worker-iceberg/).
 
 ## Features
 

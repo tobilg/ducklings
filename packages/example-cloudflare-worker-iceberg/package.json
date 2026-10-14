@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check-deps": "test -f ../ducklings-workers-iceberg/dist/index.js || (echo 'Error: @ducklings/workers has not been built yet.' && echo 'Run the following from the repo root first:' && echo '' && echo '  make duckdb-workers      # compile Iceberg WASM with Asyncify' && echo '  make typescript-workers   # build TypeScript package' && exit 1)",
+    "check-deps": "test -f ../ducklings-workers-iceberg/dist/index.js || (echo 'Error: @ducklings/workers-iceberg has not been built yet.' && echo 'Run the following from the repo root first:' && echo '' && echo '  make duckdb-workers-iceberg # compile Iceberg WASM with Asyncify' && echo '  make typescript-workers-iceberg # build TypeScript package' && exit 1)",
     "predev": "pnpm run check-deps",
     "prebuild": "pnpm run check-deps",
     "build": "vite build",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ducklings/workers": "workspace:*"
+    "@ducklings/workers-iceberg": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.26.1",

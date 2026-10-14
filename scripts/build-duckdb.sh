@@ -3,7 +3,7 @@
 # Includes httpfs and selected lakehouse extensions statically with WASM HTTP client
 # Supports:
 #   - browser (default): Optimized for size, uses synchronous XMLHttpRequest
-#   - workers build: Generic/testable workers wrapper (Iceberg by default)
+#   - workers build: Generic/testable workers wrapper (httpfs and Parquet)
 #   - workers release: Production Cloudflare Workers wrapper
 #   - workers local-debug: Wrangler/Miniflare-friendly wrapper + debug symbols/assertions
 set -euo pipefail
@@ -12,13 +12,18 @@ set -euo pipefail
 TARGET="${1:-browser}"
 LINK_ONLY=false
 WORKERS_PROFILE="${DUCKLINGS_WORKERS_PROFILE:-}"
-WORKERS_FLAVOR="${DUCKLINGS_WORKERS_FLAVOR:-iceberg}"
+WORKERS_FLAVOR="base"
 
 case "${TARGET}" in
     browser)
         WORKERS_FLAVOR="iceberg"
         ;;
-    workers|workers-iceberg)
+    workers)
+        TARGET="workers"
+        WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
+        WORKERS_FLAVOR="base"
+        ;;
+    workers-iceberg)
         TARGET="workers"
         WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
         WORKERS_FLAVOR="iceberg"
@@ -34,7 +39,13 @@ case "${TARGET}" in
         WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
         WORKERS_FLAVOR="ducklake"
         ;;
-    link-workers|link-workers-iceberg)
+    link-workers)
+        TARGET="workers"
+        LINK_ONLY=true
+        WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
+        WORKERS_FLAVOR="base"
+        ;;
+    link-workers-iceberg)
         TARGET="workers"
         LINK_ONLY=true
         WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
@@ -46,7 +57,12 @@ case "${TARGET}" in
         WORKERS_PROFILE="${WORKERS_PROFILE:-build}"
         WORKERS_FLAVOR="ducklake"
         ;;
-    release-workers|release-workers-iceberg)
+    release-workers)
+        TARGET="workers"
+        WORKERS_PROFILE="release"
+        WORKERS_FLAVOR="base"
+        ;;
+    release-workers-iceberg)
         TARGET="workers"
         WORKERS_PROFILE="release"
         WORKERS_FLAVOR="iceberg"
@@ -56,7 +72,13 @@ case "${TARGET}" in
         WORKERS_PROFILE="release"
         WORKERS_FLAVOR="ducklake"
         ;;
-    link-release-workers|link-release-workers-iceberg)
+    link-release-workers)
+        TARGET="workers"
+        LINK_ONLY=true
+        WORKERS_PROFILE="release"
+        WORKERS_FLAVOR="base"
+        ;;
+    link-release-workers-iceberg)
         TARGET="workers"
         LINK_ONLY=true
         WORKERS_PROFILE="release"
@@ -68,7 +90,12 @@ case "${TARGET}" in
         WORKERS_PROFILE="release"
         WORKERS_FLAVOR="ducklake"
         ;;
-    debug-workers|debug-workers-iceberg)
+    debug-workers)
+        TARGET="workers"
+        WORKERS_PROFILE="local-debug"
+        WORKERS_FLAVOR="base"
+        ;;
+    debug-workers-iceberg)
         TARGET="workers"
         WORKERS_PROFILE="local-debug"
         WORKERS_FLAVOR="iceberg"
@@ -78,7 +105,13 @@ case "${TARGET}" in
         WORKERS_PROFILE="local-debug"
         WORKERS_FLAVOR="ducklake"
         ;;
-    link-debug-workers|link-debug-workers-iceberg)
+    link-debug-workers)
+        TARGET="workers"
+        LINK_ONLY=true
+        WORKERS_PROFILE="local-debug"
+        WORKERS_FLAVOR="base"
+        ;;
+    link-debug-workers-iceberg)
         TARGET="workers"
         LINK_ONLY=true
         WORKERS_PROFILE="local-debug"
@@ -91,27 +124,27 @@ case "${TARGET}" in
         WORKERS_FLAVOR="ducklake"
         ;;
     *)
-        echo "Usage: $0 [browser|workers|workers-ducklake|link-workers|link-workers-ducklake|release-workers|release-workers-ducklake|debug-workers|debug-workers-ducklake]"
+        echo "Usage: $0 [browser|workers|workers-iceberg|workers-ducklake|workers-spatial|link-workers[-iceberg|-ducklake|-spatial]|release-workers[-iceberg|-ducklake]|debug-workers[-iceberg|-ducklake]]"
         echo "  browser (default): Browser build with sync XMLHttpRequest"
-        echo "  workers: Iceberg workers build optimized for Cloudflare deployment size"
+        echo "  workers: Base workers build with httpfs and Parquet"
+        echo "  workers-iceberg: Adds Avro and Iceberg to the base extensions"
         echo "  workers-ducklake: DuckLake workers build optimized for Cloudflare deployment size"
         echo "  workers-spatial/link-workers-spatial: Spatial build / re-link"
         echo "  link-workers/link-workers-ducklake: Link-only workers builds"
         echo "  release-workers/release-workers-ducklake: Production workers builds"
         echo "  debug-workers/debug-workers-ducklake: Local workers debug builds with symbols/assertions"
         echo "  Optional: set DUCKLINGS_WORKERS_PROFILE=build|release|local-debug"
-        echo "  Optional: set DUCKLINGS_WORKERS_FLAVOR=iceberg|ducklake for workers targets"
         exit 1
         ;;
 esac
 
 EXTENSION_FLAVOR="${WORKERS_FLAVOR}"
 case "${EXTENSION_FLAVOR}" in
-    iceberg|ducklake|spatial)
+    base|iceberg|ducklake|spatial)
         ;;
     *)
         echo "[ERROR] Unknown workers flavor: ${EXTENSION_FLAVOR}"
-        echo "Supported values: iceberg, ducklake, spatial"
+        echo "Supported values: base, iceberg, ducklake, spatial"
         exit 1
         ;;
 esac
@@ -123,21 +156,11 @@ if [ "$TARGET" = "workers" ]; then
             WORKERS_WASM_DEBUG_DEFAULT=0
             JSON_EXTENSION_ENABLED=0
             WORKERS_RUN_WASM_OPT=1
-            if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
-                OUTPUT_SUFFIX="-workers-ducklake"
-            else
-                OUTPUT_SUFFIX="-workers"
-            fi
             ;;
         local-debug)
             WORKERS_WASM_DEBUG_DEFAULT=1
             JSON_EXTENSION_ENABLED=1
             WORKERS_RUN_WASM_OPT=0
-            if [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
-                OUTPUT_SUFFIX="-workers-ducklake"
-            else
-                OUTPUT_SUFFIX="-workers"
-            fi
             ;;
         *)
             echo "[ERROR] Unknown workers profile: ${WORKERS_PROFILE}"
@@ -145,6 +168,12 @@ if [ "$TARGET" = "workers" ]; then
             exit 1
             ;;
     esac
+
+    if [ "${EXTENSION_FLAVOR}" = "base" ]; then
+        OUTPUT_SUFFIX="-workers"
+    else
+        OUTPUT_SUFFIX="-workers-${EXTENSION_FLAVOR}"
+    fi
 
     ASYNCIFY_STRATEGY="${DUCKLINGS_ASYNCIFY_STRATEGY:-legacy-remove}"
     ASYNCIFY_STACK_SIZE="${DUCKLINGS_ASYNCIFY_STACK_SIZE:-262144}"
@@ -1454,14 +1483,14 @@ link_wasm_module() {
     local PRELOADED_FLAGS=""
     local EXTENSION_LOADS=""
     local EXTENSION_LOAD_COMMENT=""
-    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
+    if [ "${EXTENSION_FLAVOR}" = "base" ] || [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
         PRELOADED_FLAGS='bool preloaded_httpfs = true;
 bool preloaded_avro = false;
 bool preloaded_iceberg = false;
 bool preloaded_ducklake = false;
 bool preloaded_quack = false;'
         EXTENSION_LOADS='duckdb_instance.LoadStaticExtension<duckdb::HttpfsExtension>();'
-        EXTENSION_LOAD_COMMENT='// Spatial is registered by the generated static extension loader.'
+        EXTENSION_LOAD_COMMENT='// Parquet and other configured static extensions use the generated loader.'
     elif [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
         EXTENSION_INCLUDES='#include "quack_extension.hpp"
 #include "ducklake_extension.hpp"'
@@ -1881,12 +1910,14 @@ print_summary() {
     fi
 
     echo ""
-    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
+    if [ "${EXTENSION_FLAVOR}" = "base" ]; then
+        log_info "Built with static extensions: parquet, httpfs (WASM HTTP client)"
+    elif [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
         log_info "Built with static extensions: parquet, httpfs, spatial (GEOS + PROJ)"
     elif [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
         log_info "Built with static extensions: httpfs, quack client, ducklake (WASM HTTP client)"
     else
-        log_info "Built with static extensions: httpfs, avro, iceberg (WASM HTTP client)"
+        log_info "Built with static extensions: parquet, httpfs, avro, iceberg (WASM HTTP client)"
     fi
     if [ "$TARGET" = "workers" ]; then
         log_info "This build uses Asyncify + fetch() for Cloudflare Workers"
@@ -1901,9 +1932,12 @@ print_summary() {
         elif [ "${EXTENSION_FLAVOR}" = "ducklake" ]; then
             log_info "  1. Build TypeScript package: make typescript-workers-ducklake"
             log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker-ducklake build"
+        elif [ "${EXTENSION_FLAVOR}" = "iceberg" ]; then
+            log_info "  1. Build TypeScript package: make typescript-workers-iceberg"
+            log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker-iceberg build"
         else
             log_info "  1. Build TypeScript package: make typescript-workers"
-            log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker-iceberg build"
+            log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker build"
         fi
     else
         log_info "  1. Build TypeScript package: cd packages/ducklings-browser && pnpm build"

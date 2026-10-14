@@ -7,7 +7,7 @@ Minimal Cloudflare Worker example for querying Iceberg tables through Ducklings.
 - Single `POST /query` endpoint
 - One-time initialization during the first query request
 - Automatic `CREATE SECRET` + `ATTACH` for a Cloudflare Data Catalog backed Iceberg catalog
-- DuckDB WASM powered by `@ducklings/workers`
+- DuckDB WASM powered by `@ducklings/workers-iceberg`
 
 ## Required Worker Secrets
 
@@ -21,8 +21,8 @@ Set these in Wrangler or in the Cloudflare dashboard:
 
 ```bash
 pnpm install
-make duckdb-workers
-make typescript-workers
+make duckdb-workers-iceberg
+make typescript-workers-iceberg
 cd packages/example-cloudflare-worker-iceberg
 pnpm dev
 ```

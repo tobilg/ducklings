@@ -6,8 +6,8 @@ import {
   sanitizeSql,
   DuckDBError,
   type Connection,
-} from '@ducklings/workers';
-import wasmModule from '@ducklings/workers/wasm';
+} from '@ducklings/workers-iceberg';
+import wasmModule from '@ducklings/workers-iceberg/wasm';
 
 interface Env {
   CF_R2_DATA_CATALOG_SECRET?: string;

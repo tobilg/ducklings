@@ -38,17 +38,21 @@ endef
 SYNC_VERSIONS_STAMP := $(BUILD_DIR)/.sync-versions.stamp
 BROWSER_WASM := $(DIST_DIR)/duckdb.wasm
 BROWSER_JS := $(DIST_DIR)/duckdb.js
-WORKERS_ICEBERG_WASM := $(DIST_DIR)/duckdb-workers.wasm
-WORKERS_ICEBERG_JS := $(DIST_DIR)/duckdb-workers.js
+WORKERS_WASM := $(DIST_DIR)/duckdb-workers.wasm
+WORKERS_JS := $(DIST_DIR)/duckdb-workers.js
+WORKERS_ICEBERG_WASM := $(DIST_DIR)/duckdb-workers-iceberg.wasm
+WORKERS_ICEBERG_JS := $(DIST_DIR)/duckdb-workers-iceberg.js
 WORKERS_DUCKLAKE_WASM := $(DIST_DIR)/duckdb-workers-ducklake.wasm
 WORKERS_DUCKLAKE_JS := $(DIST_DIR)/duckdb-workers-ducklake.js
 BROWSER_PACKAGE_STAMP := packages/ducklings-browser/dist/.build.stamp
+WORKERS_PACKAGE_STAMP := packages/ducklings-workers/dist/.build.stamp
 WORKERS_ICEBERG_PACKAGE_STAMP := packages/ducklings-workers-iceberg/dist/.build.stamp
 WORKERS_DUCKLAKE_PACKAGE_STAMP := packages/ducklings-workers-ducklake/dist/.build.stamp
 
 SYNC_VERSION_FILES := \
 	packages/ducklings-browser/package.json \
 	packages/ducklings-workers-shared/package.json \
+	packages/ducklings-workers/package.json \
 	packages/ducklings-workers-iceberg/package.json \
 	packages/ducklings-workers-ducklake/package.json \
 	packages/ducklings-workers-spatial/package.json \
@@ -86,6 +90,14 @@ BROWSER_PACKAGE_SOURCES := \
 WORKERS_SHARED_SOURCES := \
 	$(call find_files,packages/ducklings-workers-shared/src) \
 	packages/ducklings-workers-shared/package.json
+
+WORKERS_PACKAGE_SOURCES := \
+	$(WORKERS_SHARED_SOURCES) \
+	$(call find_files,packages/ducklings-workers/src) \
+	packages/ducklings-workers/package.json \
+	packages/ducklings-workers/tsconfig.json \
+	packages/ducklings-workers/tsup.config.ts \
+	$(PNPM_MANIFESTS)
 
 WORKERS_ICEBERG_PACKAGE_SOURCES := \
 	$(WORKERS_SHARED_SOURCES) \
@@ -137,6 +149,7 @@ $(SYNC_VERSIONS_STAMP): Makefile $(SYNC_VERSION_FILES)
 	@echo "Setting npm package versions to $(NPM_VERSION)..."
 	cd packages/ducklings-browser && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers-shared && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/ducklings-workers && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers-iceberg && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers-ducklake && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers-spatial && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
@@ -163,19 +176,26 @@ $(BROWSER_WASM): $(NATIVE_BUILD_SOURCES)
 $(BROWSER_JS): $(BROWSER_WASM)
 	@test -f $@ || ./scripts/build-duckdb.sh browser
 
-# Build Cloudflare Workers-compatible WASM (deploy-size profile: no json + wasm-opt).
-# Compatibility target: the historical workers build is the Iceberg flavor.
-duckdb-workers: duckdb-workers-iceberg
+# Build the base Workers WASM with only Parquet and httpfs.
+duckdb-workers: $(WORKERS_WASM) $(WORKERS_JS)
+
+$(WORKERS_WASM): $(NATIVE_BUILD_SOURCES)
+	./scripts/build-duckdb.sh workers
+	@test -f $(WORKERS_JS)
+	@test -f $@
+
+$(WORKERS_JS): $(WORKERS_WASM)
+	@test -f $@ || ./scripts/build-duckdb.sh workers
 
 duckdb-workers-iceberg: $(WORKERS_ICEBERG_WASM) $(WORKERS_ICEBERG_JS)
 
 $(WORKERS_ICEBERG_WASM): $(NATIVE_BUILD_SOURCES)
-	./scripts/build-duckdb.sh workers
+	./scripts/build-duckdb.sh workers-iceberg
 	@test -f $(WORKERS_ICEBERG_JS)
 	@test -f $@
 
 $(WORKERS_ICEBERG_JS): $(WORKERS_ICEBERG_WASM)
-	@test -f $@ || ./scripts/build-duckdb.sh workers
+	@test -f $@ || ./scripts/build-duckdb.sh workers-iceberg
 
 duckdb-workers-ducklake: $(WORKERS_DUCKLAKE_WASM) $(WORKERS_DUCKLAKE_JS)
 
@@ -187,7 +207,7 @@ $(WORKERS_DUCKLAKE_WASM): $(NATIVE_BUILD_SOURCES)
 $(WORKERS_DUCKLAKE_JS): $(WORKERS_DUCKLAKE_WASM)
 	@test -f $@ || ./scripts/build-duckdb.sh workers-ducklake
 
-duckdb-workers-all: duckdb-workers-iceberg duckdb-workers-ducklake
+duckdb-workers-all: duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake
 
 # Build both browser and workers WASM
 duckdb-all: duckdb-browser duckdb-workers-all
@@ -204,8 +224,14 @@ $(BROWSER_PACKAGE_STAMP): $(SYNC_VERSIONS_STAMP) $(BROWSER_WASM) $(BROWSER_JS) $
 	@test -f packages/ducklings-browser/dist/wasm/duckdb.wasm
 	@touch $@
 
-# Build workers TypeScript package. Compatibility target: Iceberg flavor.
-typescript-workers: typescript-workers-iceberg
+# Build the default Workers package with the base WASM.
+typescript-workers: $(WORKERS_PACKAGE_STAMP)
+
+$(WORKERS_PACKAGE_STAMP): $(SYNC_VERSIONS_STAMP) $(WORKERS_WASM) $(WORKERS_JS) $(WORKERS_PACKAGE_SOURCES)
+	cd packages/ducklings-workers && CI=true pnpm install --frozen-lockfile && pnpm build
+	@test -f packages/ducklings-workers/dist/index.js
+	@test -f packages/ducklings-workers/dist/wasm/duckdb-workers.wasm
+	@touch $@
 
 typescript-workers-iceberg: $(WORKERS_ICEBERG_PACKAGE_STAMP)
 
@@ -223,7 +249,7 @@ $(WORKERS_DUCKLAKE_PACKAGE_STAMP): $(SYNC_VERSIONS_STAMP) $(WORKERS_DUCKLAKE_WAS
 	@test -f packages/ducklings-workers-ducklake/dist/wasm/duckdb-workers.wasm
 	@touch $@
 
-typescript-workers-all: typescript-workers-iceberg typescript-workers-ducklake
+typescript-workers-all: typescript-workers typescript-workers-iceberg typescript-workers-ducklake
 
 # Build all TypeScript packages
 typescript-all: typescript-browser typescript-workers-all
@@ -242,6 +268,7 @@ clean:
 	cd deps/ducklake && git checkout -- . || true
 	rm -rf vcpkg_installed
 	cd packages/ducklings-browser && rm -rf node_modules dist || true
+	cd packages/ducklings-workers && rm -rf node_modules dist || true
 	cd packages/ducklings-workers-iceberg && rm -rf node_modules dist || true
 	cd packages/ducklings-workers-ducklake && rm -rf node_modules dist || true
 
@@ -277,17 +304,17 @@ help:
 	@echo "  sync-versions      - Set npm package versions to DUCKDB_VERSION"
 	@echo "  duckdb             - Compile DuckDB to WASM (browser build)"
 	@echo "  duckdb-browser     - Browser WASM (smaller, uses sync XMLHttpRequest)"
-	@echo "  duckdb-workers     - CF Workers WASM with Iceberg (compatibility alias)"
+	@echo "  duckdb-workers     - CF Workers WASM with httpfs and Parquet"
 	@echo "  duckdb-workers-iceberg - CF Workers WASM with httpfs, Avro, Iceberg"
 	@echo "  duckdb-workers-ducklake - CF Workers WASM with httpfs, DuckLake"
-	@echo "  duckdb-workers-all - Build both workers WASM flavors"
-	@echo "  duckdb-all         - Build browser and both workers WASM flavors"
+	@echo "  duckdb-workers-all - Build base, Iceberg, and DuckLake workers WASM"
+	@echo "  duckdb-all         - Build browser, base Workers, Iceberg, and DuckLake WASM"
 	@echo "  typescript         - Build browser TypeScript package"
 	@echo "  typescript-browser - Build @ducklings/browser package"
-	@echo "  typescript-workers - Build @ducklings/workers package (compatibility alias)"
-	@echo "  typescript-workers-iceberg - Build @ducklings/workers package"
+	@echo "  typescript-workers - Build @ducklings/workers package"
+	@echo "  typescript-workers-iceberg - Build @ducklings/workers-iceberg package"
 	@echo "  typescript-workers-ducklake - Build @ducklings/workers-ducklake package"
-	@echo "  typescript-workers-all - Build both workers TypeScript packages"
+	@echo "  typescript-workers-all - Build default, Iceberg, and DuckLake TypeScript packages"
 	@echo "  typescript-all     - Build all TypeScript packages"
 	@echo "  clean              - Remove all build artifacts"
 	@echo "  rebuild            - Clean and rebuild everything"

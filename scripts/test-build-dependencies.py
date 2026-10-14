@@ -82,9 +82,9 @@ build_http_wasm_client() { :; }
 bundle_nanoarrow() { :; }
 build_nanoarrow() { :; }
 build_arrow_ipc_insert() { :; }
-build_avro() { :; }
-build_iceberg() { :; }
-link_wasm_module() { :; }
+build_avro() { echo avro >> "$FIXTURE_ROOT/extensions.log"; }
+build_iceberg() { echo iceberg >> "$FIXTURE_ROOT/extensions.log"; }
+link_wasm_module() { echo "link:$EXTENSION_FLAVOR:$OUTPUT_SUFFIX" >> "$FIXTURE_ROOT/extensions.log"; }
 print_summary() { :; }
 main
 '''], env={
@@ -107,6 +107,28 @@ main
         result = self.run_build("browser")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(self.log.read_text().splitlines(), ["install", "configure"])
+
+    def test_base_and_iceberg_build_distinct_artifacts_with_only_selected_extensions(self):
+        for target in ("workers", "workers-iceberg"):
+            result = self.run_build(target)
+            self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual((self.root / "extensions.log").read_text().splitlines(), [
+            "link:base:-workers", "avro", "iceberg", "link:iceberg:-workers-iceberg",
+        ])
+
+    def test_worker_profiles_and_link_aliases_preserve_the_selected_flavor(self):
+        for prefix in ("", "link-", "release-", "link-release-", "debug-", "link-debug-"):
+            for suffix, flavor in (("", "base"), ("-iceberg", "iceberg")):
+                target = f"{prefix}workers{suffix}"
+                with self.subTest(target=target):
+                    result = subprocess.run([
+                        "bash", "-c",
+                        'source "$1" "$2"; echo "$EXTENSION_FLAVOR:$OUTPUT_SUFFIX:$LINK_ONLY:$WORKERS_PROFILE"',
+                        "bash", str(ROOT / "scripts/build-duckdb.sh"), target,
+                    ], text=True, capture_output=True, check=True)
+                    profile = "local-debug" if "debug" in prefix else "release" if "release" in prefix else "build"
+                    link = "true" if prefix.startswith("link-") else "false"
+                    self.assertEqual(result.stdout.strip(), f"{flavor}:-workers{suffix}:{link}:{profile}")
 
     def test_install_failure_stops_native_build(self):
         result = self.run_build("browser", fail_install=True)

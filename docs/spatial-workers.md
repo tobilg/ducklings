@@ -1,6 +1,12 @@
 # Spatial support for Cloudflare Workers
 
-The `@ducklings/workers-spatial` package statically links DuckDB spatial, Parquet, and httpfs with GEOS and PROJ. GDAL readers such as `ST_Read` and the lakehouse extensions are omitted. The package is private and is not published to npm.
+The `@ducklings/workers-spatial` package statically links DuckDB spatial, Parquet, and httpfs with GEOS and PROJ. GDAL readers such as `ST_Read` and the lakehouse extensions are omitted. The release workflow builds, tests, and publishes this package alongside the other variants.
+
+```sh
+npm install @ducklings/workers-spatial
+```
+
+Maintainers must complete the [initial npm publication and trusted publisher setup](publishing.md) before the first automated release.
 
 ## Build
 

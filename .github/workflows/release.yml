@@ -20,6 +20,7 @@ on:
 env:
   EMSDK_VERSION: '4.0.22'
   NODE_VERSION: '22'
+  NPM_VERSION: '11' # OIDC requires npm >= 11.5.1 and Node >= 22.14.0.
   CF_PAGES_MAX_FILE_BYTES: '26214400'
 
 jobs:
@@ -79,7 +80,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: version
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     timeout-minutes: 90
     steps:
       - name: Checkout repository
@@ -135,8 +137,11 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@${{ env.NPM_VERSION }}
 
       - name: Sync package versions
         run: make sync-versions VERSION_SUFFIX="${{ needs.version.outputs.suffix }}"
@@ -158,19 +163,22 @@ jobs:
         run: |
           cd packages/ducklings-browser && pnpm test
 
+      - name: Check npm package contents
+        working-directory: packages/ducklings-browser
+        run: npm pack --dry-run
+
       - name: Publish @ducklings/browser
         if: ${{ needs.version.outputs.dry_run != 'true' }}
         run: |
           cd packages/ducklings-browser
           npm publish --access public --tag ${{ needs.version.outputs.npm_tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   workers:
     runs-on: ubuntu-latest
     needs: version
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     timeout-minutes: 90
     steps:
       - name: Checkout repository
@@ -198,8 +206,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.1
 
-      - name: Build workers WASM
-        run: make duckdb-workers
+      - name: Build base and Iceberg workers WASM
+        run: make duckdb-workers duckdb-workers-iceberg
 
       - name: Upload workers WASM artifacts
         uses: actions/upload-artifact@v7
@@ -208,6 +216,8 @@ jobs:
           path: |
             dist/duckdb-workers.wasm
             dist/duckdb-workers.js
+            dist/duckdb-workers-iceberg.wasm
+            dist/duckdb-workers-iceberg.js
           if-no-files-found: error
 
       - name: Setup pnpm
@@ -217,42 +227,66 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@${{ env.NPM_VERSION }}
 
       - name: Sync package versions
         run: make sync-versions VERSION_SUFFIX="${{ needs.version.outputs.suffix }}"
 
       - name: Install dependencies
-        run: |
-          cd packages/ducklings-workers-iceberg && pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: |
-          cd packages/ducklings-workers-iceberg
-          pnpm build
+      - name: Build default and Iceberg packages
+        run: pnpm --filter @ducklings/workers --filter @ducklings/workers-iceberg -r build
 
       - name: Type check
-        run: |
-          cd packages/ducklings-workers-iceberg && pnpm typecheck
+        run: pnpm --filter @ducklings/workers --filter @ducklings/workers-iceberg -r typecheck
 
       - name: Test
-        run: |
-          cd packages/ducklings-workers-iceberg && pnpm test
+        run: pnpm --filter @ducklings/workers --filter @ducklings/workers-iceberg -r test
+
+      - name: Build default and Iceberg examples
+        run: pnpm --filter @ducklings/example-cloudflare-worker --filter @ducklings/example-cloudflare-worker-iceberg -r build
+
+      - name: Pack default Workers npm package
+        working-directory: packages/ducklings-workers
+        run: npm pack --pack-destination ../../dist
+
+      - name: Upload default Workers npm package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ducklings-workers-package
+          path: dist/ducklings-workers-${{ needs.version.outputs.version }}.tgz
+          if-no-files-found: error
+
+      - name: Pack Iceberg npm package
+        working-directory: packages/ducklings-workers-iceberg
+        run: npm pack --pack-destination ../../dist
+
+      - name: Upload Iceberg npm package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ducklings-workers-iceberg-package
+          path: dist/ducklings-workers-iceberg-*.tgz
+          if-no-files-found: error
 
       - name: Publish @ducklings/workers
         if: ${{ needs.version.outputs.dry_run != 'true' }}
-        run: |
-          cd packages/ducklings-workers-iceberg
-          npm publish --access public --tag ${{ needs.version.outputs.npm_tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish ./dist/ducklings-workers-${{ needs.version.outputs.version }}.tgz --access public --tag ${{ needs.version.outputs.npm_tag }}
+
+      - name: Publish @ducklings/workers-iceberg
+        if: ${{ needs.version.outputs.dry_run != 'true' }}
+        run: npm publish ./dist/ducklings-workers-iceberg-*.tgz --access public --tag ${{ needs.version.outputs.npm_tag }}
 
   workers-ducklake:
     runs-on: ubuntu-latest
     needs: version
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     timeout-minutes: 90
     steps:
       - name: Checkout repository
@@ -299,8 +333,11 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@${{ env.NPM_VERSION }}
 
       - name: Sync package versions
         run: make sync-versions VERSION_SUFFIX="${{ needs.version.outputs.suffix }}"
@@ -322,13 +359,107 @@ jobs:
         run: |
           cd packages/ducklings-workers-ducklake && pnpm test
 
+      - name: Check npm package contents
+        working-directory: packages/ducklings-workers-ducklake
+        run: npm pack --dry-run
+
       - name: Publish @ducklings/workers-ducklake
         if: ${{ needs.version.outputs.dry_run != 'true' }}
         run: |
           cd packages/ducklings-workers-ducklake
           npm publish --access public --tag ${{ needs.version.outputs.npm_tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  workers-spatial:
+    runs-on: ubuntu-latest
+    needs: version
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Add Emscripten upstream tools to PATH
+        run: echo "$EMSDK/upstream/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchain
+        run: |
+          which emcc
+          emcc -v
+          which wasm-opt
+          wasm-opt --version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Build Spatial workers WASM
+        run: make duckdb-workers-spatial
+
+      - name: Upload Spatial workers WASM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: duckdb-workers-spatial-dist
+          path: |
+            dist/duckdb-workers-spatial.wasm
+            dist/duckdb-workers-spatial.js
+          if-no-files-found: error
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@${{ env.NPM_VERSION }}
+
+      - name: Sync package versions
+        run: make sync-versions VERSION_SUFFIX="${{ needs.version.outputs.suffix }}"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @ducklings/workers-spatial build
+
+      - name: Type check
+        run: pnpm --filter @ducklings/workers-spatial typecheck
+
+      - name: Check Worker bundle size
+        run: make check-worker-spatial-size
+
+      - name: Integration test (workerd)
+        run: pnpm --filter @ducklings/example-cloudflare-worker-spatial test
+
+      - name: Pack Spatial npm package
+        working-directory: packages/ducklings-workers-spatial
+        run: npm pack --pack-destination ../../dist
+
+      # Also available on dry runs for the first authenticated npm publication.
+      - name: Upload Spatial npm package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ducklings-workers-spatial-package
+          path: dist/ducklings-workers-spatial-*.tgz
+          if-no-files-found: error
+
+      - name: Publish @ducklings/workers-spatial
+        if: ${{ needs.version.outputs.dry_run != 'true' }}
+        run: npm publish ./dist/ducklings-workers-spatial-*.tgz --access public --tag ${{ needs.version.outputs.npm_tag }}
 
   # Deploy browser example to Cloudflare Pages
   deploy-example-browser:
@@ -443,7 +574,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: [version, browser, workers, workers-ducklake]
+    needs: [version, browser, workers, workers-ducklake, workers-spatial]
     if: ${{ github.event_name == 'push' && needs.version.outputs.dry_run != 'true' }}
     permissions:
       contents: write
@@ -471,21 +602,31 @@ jobs:
           name: duckdb-workers-ducklake-dist
           path: dist
 
+      - name: Download Spatial workers WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: duckdb-workers-spatial-dist
+          path: dist
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/duckdb.wasm
             dist/duckdb-workers.wasm
+            dist/duckdb-workers-iceberg.wasm
             dist/duckdb-workers-ducklake.wasm
+            dist/duckdb-workers-spatial.wasm
           prerelease: ${{ needs.version.outputs.npm_tag == 'dev' }}
           body: |
             ## Ducklings v${{ needs.version.outputs.version }}
 
             ### Packages
             - [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) - Browser version
-            - [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) - Cloudflare Workers version with Iceberg
+            - [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) - Default Cloudflare Workers package with httpfs and Parquet
+            - [`@ducklings/workers-iceberg`](https://www.npmjs.com/package/@ducklings/workers-iceberg) - Cloudflare Workers version with Iceberg
             - [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake) - Cloudflare Workers version with DuckLake
+            - [`@ducklings/workers-spatial`](https://www.npmjs.com/package/@ducklings/workers-spatial) - Cloudflare Workers version with Spatial
 
             ### Installation
             ```bash
@@ -495,8 +636,14 @@ jobs:
             # Cloudflare Workers
             npm install @ducklings/workers@${{ needs.version.outputs.version }}
 
+            # Explicit Iceberg package
+            npm install @ducklings/workers-iceberg@${{ needs.version.outputs.version }}
+
             # Cloudflare Workers with DuckLake
             npm install @ducklings/workers-ducklake@${{ needs.version.outputs.version }}
+
+            # Cloudflare Workers with Spatial
+            npm install @ducklings/workers-spatial@${{ needs.version.outputs.version }}
             ```
 
             ### Usage
@@ -536,18 +683,24 @@ jobs:
           echo "### Packages:" >> $GITHUB_STEP_SUMMARY
           echo "- @ducklings/browser@${{ needs.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- @ducklings/workers@${{ needs.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- @ducklings/workers-iceberg@${{ needs.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- @ducklings/workers-ducklake@${{ needs.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- @ducklings/workers-spatial@${{ needs.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Package sizes:" >> $GITHUB_STEP_SUMMARY
           echo "- duckdb.wasm: $(du -h dist/duckdb.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
           echo "- duckdb-workers.wasm: $(du -h dist/duckdb-workers.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "- duckdb-workers-iceberg.wasm: $(du -h dist/duckdb-workers-iceberg.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
           echo "- duckdb-workers-ducklake.wasm: $(du -h dist/duckdb-workers-ducklake.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "- duckdb-workers-spatial.wasm: $(du -h dist/duckdb-workers-spatial.wasm | cut -f1)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.version.outputs.npm_tag }}" = "dev" ]; then
             echo "### Install dev version:" >> $GITHUB_STEP_SUMMARY
             echo '```bash' >> $GITHUB_STEP_SUMMARY
             echo "npm install @ducklings/browser@dev" >> $GITHUB_STEP_SUMMARY
             echo "npm install @ducklings/workers@dev" >> $GITHUB_STEP_SUMMARY
+            echo "npm install @ducklings/workers-iceberg@dev" >> $GITHUB_STEP_SUMMARY
             echo "npm install @ducklings/workers-ducklake@dev" >> $GITHUB_STEP_SUMMARY
+            echo "npm install @ducklings/workers-spatial@dev" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi

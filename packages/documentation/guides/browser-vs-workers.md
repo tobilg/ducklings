@@ -5,19 +5,19 @@ group: Guides
 
 # Browser vs Workers: Choosing the Right Package
 
-Ducklings provides two packages optimized for different JavaScript runtime environments.
+Ducklings provides packages optimized for different JavaScript runtime environments.
 
 ## Package Comparison
 
-| Feature | @ducklings/browser | @ducklings/workers | @ducklings/workers-ducklake |
-|---------|-------------------|-------------------|-------------------------------|
-| **Runtime** | Browsers | Cloudflare Workers | Cloudflare Workers |
-| **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) | Asyncify (Emscripten) |
-| **WASM size (gzipped)** | ~6.3 MiB | ~10 MiB | ~10 MiB |
-| **HTTP support** | Via httpfs extension | Native async fetch() | Native async fetch() |
-| **Lakehouse extension** | Iceberg | Iceberg | DuckLake |
-| **JSON extension** | Not bundled | Not bundled | Not bundled |
-| **Threading** | Offloaded to Web Worker | Single-threaded | Single-threaded |
+| Feature | @ducklings/browser | @ducklings/workers | @ducklings/workers-iceberg | @ducklings/workers-ducklake |
+| --------- | ------------------- | ------------------- | ---------------------------- | ------------------------------- |
+| **Runtime** | Browsers | Cloudflare Workers | Cloudflare Workers | Cloudflare Workers |
+| **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) | Asyncify (Emscripten) | Asyncify (Emscripten) |
+| **WASM size (gzipped)** | ~6.3 MiB | ~9.3 MiB | ~10 MiB | ~10 MiB |
+| **HTTP support** | Via httpfs extension | Native async fetch() | Native async fetch() | Native async fetch() |
+| **Lakehouse extension** | Iceberg | None | Iceberg | DuckLake |
+| **JSON extension** | Not bundled | Not bundled | Not bundled | Not bundled |
+| **Threading** | Offloaded to Web Worker | Single-threaded | Single-threaded | Single-threaded |
 
 ## When to Use @ducklings/browser
 
@@ -45,10 +45,10 @@ Use the workers package when:
 
 - Deploying to Cloudflare Workers or similar serverless platforms
 - You need async HTTP fetching inside DuckDB queries
-- You need Avro/Iceberg support
+- You need remote Parquet or CSV access without lakehouse extensions
 - Building edge functions or serverless APIs
 
-Use `@ducklings/workers-ducklake` instead when the Worker only needs `httpfs` and DuckLake.
+Use `@ducklings/workers-iceberg` for Avro and Iceberg support, or `@ducklings/workers-ducklake` for DuckLake. Each adds its extensions to httpfs and Parquet. Use the matching package name for the API, `/wasm`, and `/vite-plugin` imports.
 
 > Cloudflare allows [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Use `wrangler deploy --dry-run --outdir bundled` after each build and check `Total Upload`. Choose a plan based on CPU and other runtime requirements.
 

@@ -27,6 +27,8 @@ npm install @ducklings/workers
 pnpm add @ducklings/workers
 ```
 
+This package includes httpfs and Parquet. For Avro and Iceberg, install `@ducklings/workers-iceberg` and use that name in the API, `/wasm`, and `/vite-plugin` imports.
+
 For the DuckLake Workers flavor:
 
 ```bash

@@ -1,5 +1,5 @@
 /**
- * Vite plugin for @ducklings/workers on Cloudflare Workers
+ * Vite plugin for @ducklings/workers-iceberg on Cloudflare Workers.
  *
  * This plugin handles WASM file resolution and emission for Cloudflare Workers deployments.
  * Designed to work with @cloudflare/vite-plugin.
@@ -35,13 +35,13 @@ interface ResolvedConfig {
 export interface DucklingsWorkersPluginOptions {
   /**
    * Name of the WASM file in the output directory.
-   * @default 'duckdb-workers.wasm'
+   * @default 'duckdb-workers-iceberg.wasm'
    */
   wasmFileName?: string;
 }
 
 /**
- * Resolves the path to the WASM file bundled with @ducklings/workers.
+ * Resolves the path to the WASM file bundled with this package.
  *
  * @returns The absolute path to the WASM file
  */
@@ -56,7 +56,7 @@ export function getWasmPath(): string {
  * Vite plugin for Cloudflare Workers that handles Ducklings Workers WASM integration.
  *
  * This plugin:
- * - Resolves `@ducklings/workers/wasm` imports to a relative path for wrangler
+ * - Resolves `@ducklings/workers-iceberg/wasm` imports to a relative path for wrangler
  * - Copies the WASM file to the output directory after the bundle is written
  *
  * Designed to work with @cloudflare/vite-plugin. The plugin detects the actual
@@ -71,7 +71,7 @@ export function getWasmPath(): string {
  * // vite.config.ts
  * import { defineConfig } from 'vite';
  * import { cloudflare } from '@cloudflare/vite-plugin';
- * import { ducklingsWorkerPlugin } from '@ducklings/workers/vite-plugin';
+ * import { ducklingsWorkerPlugin } from '@ducklings/workers-iceberg/vite-plugin';
  *
  * export default defineConfig({
  *   plugins: [
@@ -82,13 +82,13 @@ export function getWasmPath(): string {
  * ```
  */
 export function ducklingsWorkerPlugin(options: DucklingsWorkersPluginOptions = {}): VitePlugin {
-  const { wasmFileName = 'duckdb-workers.wasm' } = options;
+  const { wasmFileName = 'duckdb-workers-iceberg.wasm' } = options;
 
   let projectRoot: string;
   let outDir: string;
 
   return {
-    name: 'ducklings-workers-plugin',
+    name: 'ducklings-workers-iceberg-plugin',
     enforce: 'pre' as const,
 
     configResolved(config) {
@@ -98,7 +98,7 @@ export function ducklingsWorkerPlugin(options: DucklingsWorkersPluginOptions = {
 
     // Resolve WASM imports from the package to relative path
     resolveId(id) {
-      if (id === '@ducklings/workers/wasm') {
+      if (id === '@ducklings/workers-iceberg/wasm') {
         // Return external reference that will be resolved at runtime by wrangler
         return { id: `./${wasmFileName}`, external: true as const };
       }

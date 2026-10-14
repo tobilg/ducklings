@@ -1,24 +1,26 @@
-# @ducklings/workers
+# @ducklings/workers-iceberg
 
-DuckDB WASM for Cloudflare Workers with `httpfs`, `avro`, and `iceberg` statically bundled. Async API with full TypeScript support.
+DuckDB WASM for Cloudflare Workers with `httpfs`, `parquet`, `avro`, and `iceberg` statically bundled. Async API with full TypeScript support.
 
 > Cloudflare allows [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Run `wrangler deploy --dry-run --outdir bundled` against your built Worker and check `Total Upload`. Choose a plan based on CPU and other runtime requirements.
 >
-> **Extension note:** The published `@ducklings/workers` package does not bundle DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard package. The published `@ducklings/browser` package omits the same extension for the same reason.
+> **Extension note:** The published `@ducklings/workers-iceberg` package does not bundle DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard package. The published `@ducklings/browser` package omits the same extension for the same reason.
 >
 > For the DuckLake-focused Workers build, use [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake).
+
+This package adds Avro and Iceberg to the httpfs and Parquet extensions in [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers). Both expose the same TypeScript API, with separate WASM artifacts and Vite plugins.
 
 ## Installation
 
 ```bash
-npm install @ducklings/workers
+npm install @ducklings/workers-iceberg
 ```
 
 ## Quick Start
 
 ```typescript
-import { init, DuckDB } from '@ducklings/workers';
-import wasmModule from '@ducklings/workers/wasm';
+import { init, DuckDB } from '@ducklings/workers-iceberg';
+import wasmModule from '@ducklings/workers-iceberg/wasm';
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -44,8 +46,8 @@ export default {
 For production use, reuse the database and connection across requests to avoid re-initialization overhead:
 
 ```typescript
-import { init, DuckDB, type Connection } from '@ducklings/workers';
-import wasmModule from '@ducklings/workers/wasm';
+import { init, DuckDB, type Connection } from '@ducklings/workers-iceberg';
+import wasmModule from '@ducklings/workers-iceberg/wasm';
 
 // Global state (reused across requests in the same Worker instance)
 let db: DuckDB | null = null;
@@ -81,7 +83,7 @@ For projects using Vite with `@cloudflare/vite-plugin` to build Cloudflare Worke
 // vite.config.ts
 import { defineConfig } from 'vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
-import { ducklingsWorkerPlugin } from '@ducklings/workers/vite-plugin';
+import { ducklingsWorkerPlugin } from '@ducklings/workers-iceberg/vite-plugin';
 
 export default defineConfig({
   plugins: [
@@ -95,19 +97,19 @@ export default defineConfig({
 
 ```typescript
 ducklingsWorkerPlugin({
-  // Name of the WASM file in the output directory (default: 'duckdb-workers.wasm')
-  wasmFileName: 'duckdb-workers.wasm',
+  // Name of the WASM file in the output directory (default: 'duckdb-workers-iceberg.wasm')
+  wasmFileName: 'duckdb-workers-iceberg.wasm',
 })
 ```
 
 The plugin:
-- Resolves `@ducklings/workers/wasm` imports to a relative path for wrangler
+- Resolves `@ducklings/workers-iceberg/wasm` imports to a relative path for wrangler
 - Automatically copies the WASM file to the correct output directory (works with Cloudflare vite plugin's nested output structure)
 
 ## Features
 
 - Async API - all query methods return Promises
-- ~9.7MB gzipped WASM (includes Asyncify)
+- ~9.9 MiB gzipped WASM (includes Asyncify)
 - Built-in Parquet and httpfs extensions
 - Full httpfs support via async `fetch()`
 - Arrow Table support via Flechette (query + insert)
@@ -123,15 +125,15 @@ The published browser and workers packages do not bundle the `json` extension. R
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
 | `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | XMLHttpRequest |
-| `@ducklings/workers` | Async (Asyncify) | ~9.7 MiB | fetch() via Asyncify |
+| `@ducklings/workers-iceberg` | Async (Asyncify) | ~9.9 MiB | fetch() via Asyncify |
 
 ## API
 
 ### Initialization
 
 ```typescript
-import { init, version } from '@ducklings/workers';
-import wasmModule from '@ducklings/workers/wasm';
+import { init, version } from '@ducklings/workers-iceberg';
+import wasmModule from '@ducklings/workers-iceberg/wasm';
 
 // Initialize with pre-compiled WASM
 await init({ wasmModule });
@@ -214,8 +216,8 @@ For Cloudflare Workers, you can use [Workers Secrets](https://developers.cloudfl
 Return query results as Arrow IPC stream for efficient data transfer:
 
 ```typescript
-import { init, DuckDB, tableToIPC } from '@ducklings/workers';
-import wasmModule from '@ducklings/workers/wasm';
+import { init, DuckDB, tableToIPC } from '@ducklings/workers-iceberg';
+import wasmModule from '@ducklings/workers-iceberg/wasm';
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -260,7 +262,7 @@ await conn.transaction(async () => {
 ### Arrow Support
 
 ```typescript
-import { tableFromArrays, tableFromIPC, tableToIPC, utf8 } from '@ducklings/workers';
+import { tableFromArrays, tableFromIPC, tableToIPC, utf8 } from '@ducklings/workers-iceberg';
 
 // Query as Arrow Table
 const table = await conn.queryArrow('SELECT * FROM users');
@@ -286,7 +288,7 @@ await conn.insertArrowFromIPCStream('my_table', ipc);
 
 > **Dictionary encoding:** Flechette's `tableFromArrays()` defaults to `dictionary(utf8())` for string columns. The Arrow IPC decoder used internally does not support dictionary-encoded streams. When building tables for `insertArrowFromIPCStream()`, explicitly set string columns to `utf8()`:
 > ```typescript
-> import { utf8 } from '@ducklings/workers';
+> import { utf8 } from '@ducklings/workers-iceberg';
 > tableFromArrays({ col: ['a', 'b'] }, { types: { col: utf8() } });
 > ```
 
@@ -296,7 +298,7 @@ For browser environments, use [`@ducklings/browser`](https://www.npmjs.com/packa
 
 ## Limitations
 
-- **No dynamic extension loading**: Only statically compiled extensions are available. The default workers build includes Parquet, httpfs, Avro, and Iceberg, but not JSON. `INSTALL`/`LOAD` commands for other extensions will not work.
+- **No dynamic extension loading**: Only statically compiled extensions are available. This Iceberg workers build includes Parquet, httpfs, Avro, and Iceberg, but not JSON. `INSTALL`/`LOAD` commands for other extensions will not work.
 
 ## License
 

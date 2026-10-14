@@ -1,5 +1,5 @@
 {
-  "name": "@ducklings/workers",
+  "name": "@ducklings/workers-iceberg",
   "version": "1.5.6",
   "description": "DuckDB WASM for Cloudflare Workers with httpfs, Avro, and Iceberg",
   "type": "module",
@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "build": "tsup && pnpm postbuild",
-    "postbuild": "mkdir -p dist/wasm && cp ../../dist/duckdb-workers.js dist/wasm/ && cp ../../dist/duckdb-workers.wasm dist/wasm/ && cp src/wasm.d.ts dist/wasm.d.ts",
+    "postbuild": "mkdir -p dist/wasm && cp ../../dist/duckdb-workers-iceberg.js dist/wasm/duckdb-workers.js && cp ../../dist/duckdb-workers-iceberg.wasm dist/wasm/duckdb-workers.wasm && cp src/wasm.d.ts dist/wasm.d.ts",
     "dev": "tsup --watch",
     "test": "vitest run --reporter=dot",
     "test:watch": "vitest --reporter=dot",
