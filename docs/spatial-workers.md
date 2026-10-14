@@ -21,6 +21,8 @@ pnpm --filter @ducklings/example-cloudflare-worker-spatial test
 
 The build downloads/builds pinned dependencies with vcpkg, applies the checked-in patches idempotently, and writes `dist/duckdb-workers-spatial.{js,wasm}`. Incremental builds reuse `build/emscripten-spatial/`.
 
+All variants share the vcpkg installation. Spatial's dependency patches are applied before that installation even when the browser is built first, and vcpkg checks package ABIs on each build to replace libraries built with older patches or toolchains. Keep the Spatial submodule initialized for browser and lakehouse builds too.
+
 ## Usage
 
 ```ts

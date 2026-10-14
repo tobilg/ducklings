@@ -637,8 +637,8 @@ check_duckdb_source() {
     fi
     log_info "HTTPFS source found at $HTTPFS_SRC"
 
-    if [ "${EXTENSION_FLAVOR}" = "spatial" ] && [ ! -f "${SPATIAL_SRC}/CMakeLists.txt" ]; then
-        log_error "Spatial source is missing; initialize deps/duckdb-spatial"
+    if [ ! -f "${SPATIAL_SRC}/CMakeLists.txt" ]; then
+        log_error "Spatial source is missing; initialize deps/duckdb-spatial (all variants use its vcpkg ports)"
         exit 1
     fi
 
@@ -721,10 +721,9 @@ apply_patches() {
 
     apply_patch_series "$DUCKDB_SRC" "${PATCH_ROOT}/duckdb" "duckdb"
     apply_patch_series "$HTTPFS_SRC" "${PATCH_ROOT}/duckdb-httpfs" "duckdb-httpfs"
-    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
-        # The DuckDB 1.5.5 ResetStorage patch, refreshed for its pinned spatial source.
-        apply_patch_series "$SPATIAL_SRC" "${PATCH_ROOT}/duckdb-spatial" "duckdb-spatial"
-    fi
+    # Every variant installs the shared manifest, including GEOS and PROJ.
+    # Patch their overlay ports before even the first browser dependency build.
+    apply_patch_series "$SPATIAL_SRC" "${PATCH_ROOT}/duckdb-spatial" "duckdb-spatial"
     if [ "${EXTENSION_FLAVOR}" = "iceberg" ]; then
         apply_patch_series "$AVRO_SRC" "${PATCH_ROOT}/duckdb-avro" "duckdb-avro"
         apply_patch_series "$ICEBERG_SRC" "${PATCH_ROOT}/duckdb-iceberg" "duckdb-iceberg"
@@ -1028,15 +1027,6 @@ build_vcpkg_deps() {
     # One installation serves every variant; each variant selects its libraries at link time.
     local EXPECTED_LIBS="libroaring.a libavro.a libaws-cpp-sdk-core.a libssl.a libcrypto.a libcurl.a libjansson.a libgeos_c.a libgeos.a libproj.a libsqlite3.a libexpat.a"
 
-    local MISSING_LIBS=false
-    for lib in ${EXPECTED_LIBS}; do
-        [ -f "${VCPKG_INSTALLED}/lib/${lib}" ] || MISSING_LIBS=true
-    done
-    if [ "${MISSING_LIBS}" = false ]; then
-        log_info "vcpkg dependencies already built, skipping"
-        return
-    fi
-
     local VCPKG_DIR="${PROJECT_ROOT}/build/vcpkg"
 
     # Clone vcpkg at pinned commit if not present
@@ -1046,8 +1036,12 @@ build_vcpkg_deps() {
     fi
 
     cd "${VCPKG_DIR}"
-    git fetch origin
-    git checkout "${VCPKG_BASELINE}"
+    # Rechecking installed packages should not require a fetch when the pinned
+    # vcpkg revision is already available locally.
+    if ! git cat-file -e "${VCPKG_BASELINE}^{commit}" 2>/dev/null; then
+        git fetch origin "${VCPKG_BASELINE}"
+    fi
+    git checkout --detach "${VCPKG_BASELINE}"
 
     # Bootstrap vcpkg
     if [ ! -f "${VCPKG_DIR}/vcpkg" ]; then
@@ -1058,8 +1052,9 @@ build_vcpkg_deps() {
     # Set required env vars
     export VCPKG_ROOT="${VCPKG_DIR}"
 
-    # Install dependencies
-    log_info "Installing vcpkg packages for wasm32-emscripten (this may take a while)..."
+    # Always let vcpkg compare package ABIs. Existing archives may have been built
+    # with older overlay patches or a different Emscripten toolchain.
+    log_info "Checking/installing vcpkg packages for wasm32-emscripten (this may take a while)..."
     "${VCPKG_DIR}/vcpkg" install \
         --triplet wasm32-emscripten \
         --x-manifest-root="${PROJECT_ROOT}"
@@ -1942,4 +1937,6 @@ main() {
     fi
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

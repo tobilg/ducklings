@@ -59,6 +59,8 @@ SYNC_VERSION_FILES := \
 
 NATIVE_BUILD_SOURCES := \
 	scripts/build-duckdb.sh \
+	vcpkg.json \
+	$(call find_files,vcpkg_ports) \
 	$(call find_files,src) \
 	$(call find_files,patches) \
 	$(call find_files,deps/duckdb) \
@@ -67,6 +69,7 @@ NATIVE_BUILD_SOURCES := \
 	$(call find_files,deps/duckdb-avro) \
 	$(call find_files,deps/duckdb-quack) \
 	$(call find_files,deps/ducklake) \
+	$(call find_files,deps/duckdb-spatial/vcpkg_ports) \
 	$(call find_files,deps/nanoarrow)
 
 PNPM_MANIFESTS := $(wildcard package.json pnpm-lock.yaml pnpm-workspace.yaml)

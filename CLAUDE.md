@@ -199,6 +199,8 @@ Key libraries: AWS SDK (SigV4 signing, S3), roaring (bitmap indexes), avro-c, cu
 
 All variants share one `vcpkg_installed/` tree and pick their libraries at link time. Spatial's GEOS, PROJ, SQLite, and Expat come from the same manifest, using the overlay ports in `deps/duckdb-spatial/vcpkg_ports`. GDAL is not built.
 
+Initialize `deps/duckdb-spatial` for every variant. Apply its patches before the shared vcpkg install, including when building the browser first: GEOS and PROJ need exception catching enabled at compilation. Always run `vcpkg install` so its ABI checks rebuild stale dependencies; archive existence alone is not a valid cache check. CI cache keys include the SDK version, overlay ports, and Spatial patches.
+
 Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 ### npm Dependencies

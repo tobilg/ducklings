@@ -23,6 +23,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Check dependency build ordering and cache reuse
+        run: python3 scripts/test-build-dependencies.py
+
       - name: Setup Emscripten SDK
         uses: mymindstorm/setup-emsdk@v16
         with:
@@ -44,7 +47,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: vcpkg_installed
-          key: vcpkg-wasm32-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg_ports/**', 'deps/duckdb-spatial/vcpkg_ports/**') }}
+          key: vcpkg-wasm32-v2-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('vcpkg.json', 'vcpkg_ports/**', 'deps/duckdb-spatial/vcpkg_ports/**', 'patches/duckdb-spatial/**', 'scripts/build-duckdb.sh') }}
 
       - name: Cache DuckDB build
         id: cache-duckdb
