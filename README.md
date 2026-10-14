@@ -25,7 +25,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 
 ## Features
 
-- **Minimal footprint**: ~6.3 MiB (browser) / near Cloudflare Workers paid gzip limit (workers) (optimized with -Oz, LTO, wasm-opt)
+- **Minimal footprint**: ~6.3 MiB (browser) / ~10 MiB (workers), gzipped (optimized with -Oz, LTO, wasm-opt)
 - **TypeScript API**: Full TypeScript support with type definitions
 - **Prepared statements**: Secure parameterized queries with full type support
 - **Streaming results**: Memory-efficient chunked data processing
@@ -33,7 +33,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 - **Arrow support**: Query results as Arrow Tables, insert data via Arrow IPC streams, powered by [Flechette](https://github.com/uwdata/flechette)
 - **Parquet support**: Read Parquet files with built-in extension
 - **httpfs support**: Load remote files via HTTP/HTTPS
-- **JSON support**: Not bundled in the published browser or workers packages to stay within Cloudflare deployment size limits; use a custom build if you need DuckDB's `json` extension
+- **JSON support**: Not bundled in the published browser or workers packages to keep builds small; use a custom build if you need DuckDB's `json` extension
 - **Cloudflare Workers**: First-class support with dedicated Iceberg and DuckLake async packages
 - **Browser support**: Works in modern browsers with ES modules
 
@@ -48,7 +48,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 | `ducklake` | :x: | :x: | :white_check_mark: |
 | `json` | Default build: :x: | Default build: :x: | Default build: :x: |
 
-The published browser and workers packages do not bundle DuckDB's `json` extension so the artifacts stay within Cloudflare Pages and Workers size limits. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
+The published browser and workers packages do not bundle DuckDB's `json` extension to keep builds small. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
 
 ## Current Status
 
@@ -590,7 +590,7 @@ The WASM binary is optimized for size using:
 - **wasm-opt**: Binaryen post-processing with `-Oz --converge`
 - **Reduced exports**: Only 59 essential C functions exported
 
-Result: **~6.3 MiB gzipped** for browser. Workers builds are close to Cloudflare's paid-plan gzip limit; the DuckLake flavor is slightly smaller than the Iceberg flavor, and neither workers package bundles the JSON extension. Use `wrangler deploy --dry-run --outdir bundled` to confirm the final compressed Worker size before deploying.
+Result: **~6.3 MiB gzipped** for browser and **~10 MiB gzipped / ~40 MiB uncompressed** for Workers. Neither Workers package bundles the JSON extension. Cloudflare permits [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Use `wrangler deploy --dry-run --outdir bundled` to check the final `Total Upload`, or run `bash scripts/check-worker-size.sh <example-package-directory>` after building the example. The script defaults to 65,536 KiB uncompressed; `DUCKLINGS_WORKER_TOTAL_LIMIT_KIB` overrides that budget, and `DUCKLINGS_WORKER_GZIP_LIMIT_KIB` enables an optional gzip budget. Browser static assets retain a separate 25 MiB per-file limit.
 
 ## Development
 
@@ -644,11 +644,11 @@ make clean && make all
 All npm packages use the same version, derived from `DUCKDB_VERSION` in the Makefile:
 
 ```
-Makefile: DUCKDB_VERSION := v1.5.3
+Makefile: DUCKDB_VERSION := v1.5.6
                 ↓
-    @ducklings/browser@1.5.3
-    @ducklings/workers@1.5.3
-    @ducklings/workers-ducklake@1.5.3
+    @ducklings/browser@1.5.6
+    @ducklings/workers@1.5.6
+    @ducklings/workers-ducklake@1.5.6
 ```
 
 To update the version, change `DUCKDB_VERSION` in the Makefile. The version is automatically synced to package manifests during the build process via `make sync-versions`.
@@ -698,24 +698,42 @@ npm install @ducklings/browser@dev
 
 1. Update `DUCKDB_VERSION` in Makefile:
    ```makefile
-   DUCKDB_VERSION := v1.5.0
+   DUCKDB_VERSION := v1.5.6
    VERSION_SUFFIX :=
    ```
 
-2. Update DuckDB submodule:
+2. Update the DuckDB submodule after removing locally applied build patches:
    ```bash
-   make pin-versions
+   git -C deps/duckdb apply --reverse ../../patches/duckdb/preloaded_extensions.patch
+   git -C deps/duckdb fetch origin tag v1.5.6
+   git -C deps/duckdb checkout v1.5.6
+   make sync-versions
    ```
 
-3. Commit and tag:
+   Skip the reverse-patch command on a clean checkout. Preserve any intentional source edits before switching versions. To also update the extension branches, use `make pin-versions`; it fast-forwards every configured dependency branch.
+
+3. Rebuild and validate all three variants:
+   ```bash
+   rm -rf build/emscripten dist
+   make duckdb-all
+   make typescript-all
+   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-ducklake typecheck
+   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-ducklake test
+   ```
+
+   The tests check that both the API and SQL report the DuckDB version configured in the Makefile. Also smoke-test remote data access and check the final browser and Worker bundle sizes before releasing.
+
+4. Commit the Makefile, updated submodule references, package manifests, and any compatibility fixes, then tag:
    ```bash
    git add -A
-   git commit -m "Bump DuckDB to v1.5.0"
-   git tag v1.5.0
+   git commit -m "Bump DuckDB to v1.5.6"
+   git tag v1.5.6
    git push origin main --tags
    ```
 
-4. The release workflow automatically:
+   CI and release builds use the committed submodule references; changing only `DUCKDB_VERSION` does not update the engine they compile.
+
+5. The release workflow automatically:
    - Validates tag matches `DUCKDB_VERSION`
    - Builds WASM binaries
    - Publishes to npm with `latest` tag
@@ -849,7 +867,7 @@ ducklings/
 
 ## Known Limitations
 
-1. **WASM Size**: Browser ~6.3 MiB, Workers near Cloudflare's paid-plan gzip limit. Exceeds CF Workers free tier (3MB); use Wrangler dry-run to verify the final paid-plan upload size
+1. **WASM Size**: Browser WASM must fit the 25 MiB static-asset limit. Workers bundles must fit 64 MiB uncompressed on both plans; use Wrangler dry-run to verify the final upload size. CPU and other runtime limits still differ by plan.
 2. **No file system**: In-memory databases only (use httpfs for remote files)
 3. **No threads**: Single-threaded execution
 4. **WASM_BIGINT=0**: 64-bit integers passed as two 32-bit values (handled internally)

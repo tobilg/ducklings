@@ -5,13 +5,13 @@ Minimal Cloudflare Worker example for querying a DuckLake catalog through Duckli
 ## Features
 
 - Single `POST /query` endpoint
-- One-time worker startup initialization
+- One-time initialization during the first query request
 - Optional R2 secret setup for DuckLake data paths
 - DuckDB WASM powered by `@ducklings/workers-ducklake`
 
 ## Required Worker Settings
 
-This example requires a Cloudflare Workers paid plan. The bundled DuckDB WASM is close to the compressed Worker size limit, so run `wrangler deploy --dry-run --outdir bundled` after building to verify the final gzip size.
+Cloudflare allows [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Run `wrangler deploy --dry-run --outdir bundled` after building and check `Total Upload`. Choose a plan based on CPU and other runtime requirements.
 
 Set these as Wrangler variables or Worker secrets:
 

@@ -390,7 +390,7 @@ export class Connection {
    *
    * Requires a custom Ducklings build with DuckDB's `json` extension enabled.
    * The default published browser and workers packages omit that extension to
-   * stay within Cloudflare deployment size limits.
+   * keep the default builds small.
    *
    * @param tableName - The name of the table to insert into
    * @param path - The virtual file path of the JSON

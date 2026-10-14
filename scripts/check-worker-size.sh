@@ -2,6 +2,10 @@
 set -euo pipefail
 
 PACKAGE_DIR="${1:-packages/example-cloudflare-worker-ducklake}"
+# Cloudflare limits the uncompressed bundle to 64 MiB on both plans.
+# https://developers.cloudflare.com/workers/platform/limits/#worker-size
+# A gzip budget is optional and only enforced when explicitly configured.
+GZIP_LIMIT_KIB="${DUCKLINGS_WORKER_GZIP_LIMIT_KIB:-}"
 TOTAL_LIMIT_KIB="${DUCKLINGS_WORKER_TOTAL_LIMIT_KIB:-65536}"
 WRANGLER_LOG_PATH="${WRANGLER_LOG_PATH:-${TMPDIR:-/tmp}/ducklings-wrangler-logs}"
 
@@ -31,5 +35,9 @@ awk -v actual="${TOTAL_KIB}" -v limit="${TOTAL_LIMIT_KIB}" 'BEGIN { exit !(actua
     exit 1
 }
 
-# Since September 4, 2026, only the uncompressed 64 MiB limit applies.
+if [ -n "${GZIP_LIMIT_KIB}" ] && ! awk -v actual="${GZIP_KIB}" -v limit="${GZIP_LIMIT_KIB}" 'BEGIN { exit !(actual <= limit) }'; then
+    echo "Worker gzip size ${GZIP_KIB} KiB exceeds ${GZIP_LIMIT_KIB} KiB" >&2
+    exit 1
+fi
+
 echo "Worker size OK: ${TOTAL_KIB} KiB total, ${GZIP_KIB} KiB gzip"

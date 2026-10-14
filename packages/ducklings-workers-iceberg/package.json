@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/workers",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "description": "DuckDB WASM for Cloudflare Workers with httpfs, Avro, and Iceberg",
   "type": "module",
   "main": "./dist/index.cjs",

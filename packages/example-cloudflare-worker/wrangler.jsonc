@@ -8,7 +8,7 @@
   "compatibility_flags": ["nodejs_compat"],
 
   // Workers limits:
-  // - Free: 3MB code size, 128MB memory
-  // - Paid: 10MB code size, 128MB memory
-  // Note: the Workers WASM builds are ~9.7-9.8 MiB gzipped, so they require a paid plan.
+  // - Free and Paid: 64 MiB uncompressed code size, 128 MB memory
+  // - No compressed-size limit; CPU and other runtime limits differ by plan.
+  // https://developers.cloudflare.com/workers/platform/limits/#worker-size
 }

@@ -6,7 +6,7 @@ DIST_DIR := dist
 
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
-DUCKDB_VERSION := v1.5.5
+DUCKDB_VERSION := v1.5.6
 DUCKDB_HTTPFS_VERSION := v1.5-variegata
 DUCKDB_ICEBERG_VERSION := v1.5-variegata
 DUCKDB_AVRO_VERSION := v1.5-variegata
@@ -51,10 +51,12 @@ SYNC_VERSION_FILES := \
 	packages/ducklings-workers-shared/package.json \
 	packages/ducklings-workers-iceberg/package.json \
 	packages/ducklings-workers-ducklake/package.json \
+	packages/ducklings-workers-spatial/package.json \
 	packages/example-browser/package.json \
 	packages/example-cloudflare-worker/package.json \
 	packages/example-cloudflare-worker-iceberg/package.json \
 	packages/example-cloudflare-worker-ducklake/package.json \
+	packages/example-cloudflare-worker-spatial/package.json \
 	packages/documentation/package.json
 
 NATIVE_BUILD_SOURCES := \
@@ -137,10 +139,12 @@ $(SYNC_VERSIONS_STAMP): Makefile $(SYNC_VERSION_FILES)
 	cd packages/ducklings-workers-shared && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers-iceberg && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/ducklings-workers-ducklake && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/ducklings-workers-spatial && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-browser && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-cloudflare-worker && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-cloudflare-worker-iceberg && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/example-cloudflare-worker-ducklake && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
+	cd packages/example-cloudflare-worker-spatial && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	cd packages/documentation && pnpm version $(NPM_VERSION) --no-git-tag-version --allow-same-version
 	@touch $@
 	@echo "Versions synced!"

@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DuckDB, version, DuckDBError } from './testDb';
 type DuckDBErrorInstance = InstanceType<typeof DuckDBError>;
+
+const expectedVersion = readFileSync(new URL('../../../Makefile', import.meta.url), 'utf8')
+  .match(/^DUCKDB_VERSION\s*:=\s*(v\S+)/m)?.[1];
 
 describe('DuckDB Basic Operations (Async)', () => {
 
   describe('version()', () => {
-    it('should return the DuckDB version', () => {
+    it('should return the configured DuckDB version', () => {
       const v = version();
-      expect(v).toMatch(/^v\d+\.\d+\.\d+/);
+      expect(v).toBe(expectedVersion);
     });
   });
 
@@ -40,6 +44,12 @@ describe('DuckDB Basic Operations (Async)', () => {
     beforeAll(() => {
       db = new DuckDB();
       conn = db.connect();
+    });
+
+    it('should report the configured DuckDB version through SQL', async () => {
+      expect(await conn.query('SELECT version() AS version')).toEqual([
+        { version: expectedVersion },
+      ]);
     });
 
     it('should execute a simple SELECT', async () => {

@@ -400,7 +400,8 @@ if [ "$TARGET" = "workers" ]; then
     fi
 
     # Workers-specific memory/thread settings
-    # CF Workers has 128MB memory limit (256MB on paid plans), no threading
+    # CF Workers has a 128MB memory limit on both plans, no threading
+    # MAXIMUM_MEMORY below only caps WASM; JavaScript and I/O share the isolate budget.
     WORKERS_MEMORY_FLAGS="-s PTHREAD_POOL_SIZE=0"
 
     # Workers needs Asyncify in runtime methods
@@ -1825,17 +1826,25 @@ CFPATCH
         local OPT_WASM_FILE="${DIST_DIR}/duckdb${OUTPUT_SUFFIX}.opt.wasm"
 
         log_info "Running wasm-opt for additional size optimization..."
-        wasm-opt -Oz \
-            --enable-mutable-globals \
-            --enable-bulk-memory \
-            --enable-nontrapping-float-to-int \
-            --enable-sign-ext \
-            --strip-debug \
-            --strip-dwarf \
-            --strip-producers \
-            --converge \
-            -o "${OPT_WASM_FILE}" "${WASM_FILE}"
+        local WASM_OPT_FLAGS=(
+            -Oz
+            --enable-mutable-globals
+            --enable-bulk-memory
+            --enable-nontrapping-float-to-int
+            --enable-sign-ext
+            --strip-debug
+            --strip-dwarf
+            --strip-producers
+        )
+        wasm-opt "${WASM_OPT_FLAGS[@]}" --converge -o "${OPT_WASM_FILE}" "${WASM_FILE}"
         mv "${OPT_WASM_FILE}" "${WASM_FILE}"
+
+        # Browser WASM must fit the separate 25 MiB static-asset limit.
+        if [ "$TARGET" = "browser" ]; then
+            log_info "Running global flow optimization for the browser build..."
+            wasm-opt --gufa-optimizing "${WASM_OPT_FLAGS[@]}" --converge -o "${OPT_WASM_FILE}" "${WASM_FILE}"
+            mv "${OPT_WASM_FILE}" "${WASM_FILE}"
+        fi
         log_info "wasm-opt optimization complete!"
     elif [ "$TARGET" = "workers" ] && [ "${WORKERS_RUN_WASM_OPT}" = "1" ]; then
         log_warn "wasm-opt not found. Install binaryen for the deploy-size workers build"

@@ -28,7 +28,7 @@ The project publishes three npm packages:
 ducklings/
 ├── Makefile                       # Build orchestration
 ├── deps/                          # Git submodules
-│   ├── duckdb/                    # DuckDB v1.5.0 (C++ source)
+│   ├── duckdb/                    # DuckDB version pinned in Makefile (C++ source)
 │   ├── duckdb-httpfs/             # httpfs extension source
 │   ├── duckdb-iceberg/            # Iceberg extension source
 │   ├── duckdb-avro/               # Avro extension source (iceberg dependency)
@@ -103,6 +103,25 @@ make clean                # Clean build artifacts
 4. Package build copies WASM files to `packages/ducklings-browser/dist/wasm/`
 
 Same flow for workers variant with Asyncify enabled.
+
+### Deployment size checks
+
+- Cloudflare Workers allows **64 MiB uncompressed** on both Free and Paid plans. There is **no compressed-size limit** (verified 2026-10-14 against the [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#worker-size)).
+- Build the Worker example, then run `bash scripts/check-worker-size.sh <example-package-directory>`. Check Wrangler's `Total Upload` against 65,536 KiB; gzip is informational unless `DUCKLINGS_WORKER_GZIP_LIMIT_KIB` explicitly sets a project budget. `DUCKLINGS_WORKER_TOTAL_LIMIT_KIB` overrides the uncompressed budget.
+- Browser WASM hosted as a static asset must still fit the separate **25 MiB per-file limit**. Preserve the browser asset checks in CI and release workflows.
+- Recheck the linked platform documentation before changing limits or adding size-specific optimizations. Bundle size alone does not require a Paid plan; CPU and other runtime limits still differ by plan.
+
+### Workers runtime limits
+
+Checked against the [general Workers limits](https://developers.cloudflare.com/workers/platform/limits/) on 2026-10-14:
+
+- Memory is 128 MB **per isolate**, shared by JavaScript, WASM, and concurrent requests, on both plans. The build's `MAXIMUM_MEMORY=128MB` only caps WASM linear memory. The examples' DuckDB `memory_limit: '100MB'` is an application budget, not a cap on total isolate usage; HTTP buffers and query results also consume memory.
+- HTTP CPU time is 10 ms on Free; Paid defaults to 30 seconds and can be configured up to 300,000 ms. Network waits do not count as CPU. HTTP wall-clock duration has no hard limit while the client stays connected; `waitUntil()` extends work by up to 30 seconds after response/disconnection.
+- Top-level startup has a 1-second limit. Keep DuckDB initialization inside the request handler and reuse the initialized instance.
+- External subrequests are 50 per invocation on Free and 10,000 by default on Paid (configurable up to 10 million). Redirects count individually. Internal-service requests have a 1,000 limit on Free; on Paid they share the configured limit.
+- The six-connection limit applies to connections waiting for response headers, plus outbound WebSockets. Receiving headers releases an HTTP connection's slot; do not interpret it as a cap of six open response bodies.
+- Request body limits depend on the Cloudflare account plan (100 MB Free/Pro, 200 MB Business, up to 5 GB Enterprise), not the Workers plan. There is no platform response-body cap, but buffering remains constrained by isolate memory.
+- Free permits 100,000 requests/day; Paid has no daily request cap. Environment variables and secrets allow 64 entries on Free / 128 on Paid, 5 KB each. Do not infer that a bundle fitting on Free means its DuckDB workload fits Free CPU or subrequest quotas.
 
 ## Key Files
 

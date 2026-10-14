@@ -12,7 +12,7 @@ A minimal DuckDB WASM binding for browsers and Cloudflare Workers.
 
 All packages provide the same async API, but use different mechanisms and bundled extensions under the hood.
 
-> *The workers packages require a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) because the bundled WASM is close to Cloudflare's compressed Worker size limit. Use `wrangler deploy --dry-run --outdir bundled` to verify the final gzip size.
+> *Cloudflare allows [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Use `wrangler deploy --dry-run --outdir bundled` and check `Total Upload`. Choose a plan based on CPU and other runtime requirements.
 
 ## Quick Start
 
@@ -86,7 +86,7 @@ const results = await stmt.run();
 
 ## Features
 
-- **Minimal footprint**: ~6.3 MiB (browser) / near Cloudflare Workers paid gzip limit (workers)
+- **Minimal footprint**: ~6.3 MiB (browser) / ~10 MiB (workers), gzipped
 - **TypeScript**: Full type definitions included
 - **Prepared statements**: Secure parameterized queries
 - **Streaming results**: Memory-efficient chunked processing

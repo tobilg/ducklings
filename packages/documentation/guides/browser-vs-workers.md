@@ -13,7 +13,7 @@ Ducklings provides two packages optimized for different JavaScript runtime envir
 |---------|-------------------|-------------------|-------------------------------|
 | **Runtime** | Browsers | Cloudflare Workers | Cloudflare Workers |
 | **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) | Asyncify (Emscripten) |
-| **WASM size** | ~6.3 MiB | Near paid Worker gzip limit | Slightly smaller; near paid Worker gzip limit |
+| **WASM size (gzipped)** | ~6.3 MiB | ~10 MiB | ~10 MiB |
 | **HTTP support** | Via httpfs extension | Native async fetch() | Native async fetch() |
 | **Lakehouse extension** | Iceberg | Iceberg | DuckLake |
 | **JSON extension** | Not bundled | Not bundled | Not bundled |
@@ -50,7 +50,25 @@ Use the workers package when:
 
 Use `@ducklings/workers-ducklake` instead when the Worker only needs `httpfs` and DuckLake.
 
-> **Important:** The workers packages require a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) because the bundled WASM is close to Cloudflare's compressed Worker size limit. Use `wrangler deploy --dry-run --outdir bundled` after each build to confirm the final gzip size for your Worker.
+> Cloudflare allows [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Use `wrangler deploy --dry-run --outdir bundled` after each build and check `Total Upload`. Choose a plan based on CPU and other runtime requirements.
+
+### Workers runtime budgets
+
+The following [Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/) were checked on October 14, 2026:
+
+| Resource | Free | Paid |
+|----------|------|------|
+| Memory per isolate, including JavaScript and WASM | 128 MB | 128 MB |
+| CPU per HTTP request | 10 ms | 30 seconds by default; configurable up to 5 minutes |
+| External subrequests per invocation | 50 | 10,000 by default; configurable up to 10 million |
+| Subrequests to internal services | 1,000 | Same configured subrequest limit |
+| Connections waiting for response headers | 6 | 6 |
+| Top-level startup | 1 second | 1 second |
+| Requests per day | 100,000 | No daily limit |
+
+Remote Parquet and Iceberg queries may make many HTTP requests, and redirects count toward the subrequest budget. HTTP connections stop counting toward the six-connection limit when their response headers arrive; outbound WebSockets also count. The examples initialize DuckDB lazily during the first request, so that work uses the request's CPU budget. Waiting for network I/O does not consume CPU time. HTTP requests have no hard wall-clock limit while the client remains connected; background work through `waitUntil()` has up to 30 seconds after response or disconnection.
+
+The examples set DuckDB's `memory_limit` to `100MB`, and the build caps WASM linear memory at `128MB`. Neither setting caps total isolate usage: JavaScript, HTTP response buffers, query results, and concurrent requests share the same platform memory budget. The HTTP bridge buffers each fetched response before copying it into WASM; keep individual reads and result sets bounded even though Cloudflare has no response-body size limit. Incoming request-body limits depend on the Cloudflare account plan, separately from the Workers plan.
 
 ```typescript
 import { init, DuckDB } from '@ducklings/workers';

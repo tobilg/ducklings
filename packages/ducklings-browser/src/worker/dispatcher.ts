@@ -510,7 +510,7 @@ export class DuckDBDispatcher {
 
     // Close all connections first
     for (const [, connPtr] of this.connections) {
-      mod.ccall('duckdb_disconnect', null, ['number'], [connPtr]);
+      this.disconnectConnection(connPtr);
     }
     this.connections.clear();
 
@@ -578,11 +578,22 @@ export class DuckDBDispatcher {
     }
   }
 
-  private handleDisconnect(requestId: number, data: DisconnectRequest): void {
+  private disconnectConnection(connPtr: number): void {
     const mod = this.getModule();
+    // duckdb_disconnect takes a pointer to the connection handle and clears it.
+    const connPtrPtr = mod._malloc(4);
+    try {
+      mod.setValue(connPtrPtr, connPtr, 'i32');
+      mod.ccall('duckdb_disconnect', null, ['number'], [connPtrPtr]);
+    } finally {
+      mod._free(connPtrPtr);
+    }
+  }
+
+  private handleDisconnect(requestId: number, data: DisconnectRequest): void {
     const connPtr = this.getConnectionPtr(data.connectionId);
 
-    mod.ccall('duckdb_disconnect', null, ['number'], [connPtr]);
+    this.disconnectConnection(connPtr);
     this.connections.delete(data.connectionId);
 
     this.postOK(requestId);

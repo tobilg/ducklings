@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DuckDB, getDB, version, DuckDBError, type Connection } from './testDb';
+
+const expectedVersion = readFileSync(new URL('../../../Makefile', import.meta.url), 'utf8')
+  .match(/^DUCKDB_VERSION\s*:=\s*(v\S+)/m)?.[1];
 
 describe('DuckDB Basic Operations', () => {
   // Use a single shared connection for all tests to avoid issues with
@@ -15,9 +19,9 @@ describe('DuckDB Basic Operations', () => {
   // Note: Don't close connection - it's shared across test files via getDB()
 
   describe('version()', () => {
-    it('should return the DuckDB version', async () => {
+    it('should return the configured DuckDB version', async () => {
       const v = await version();
-      expect(v).toMatch(/^v\d+\.\d+\.\d+/);
+      expect(v).toBe(expectedVersion);
     });
   });
 
@@ -35,6 +39,12 @@ describe('DuckDB Basic Operations', () => {
   });
 
   describe('Connection.query()', () => {
+
+    it('should report the configured DuckDB version through SQL', async () => {
+      expect(await conn.query('SELECT version() AS version')).toEqual([
+        { version: expectedVersion },
+      ]);
+    });
 
     it('should execute a simple SELECT', async () => {
       const result = await conn.query('SELECT 42 AS answer');

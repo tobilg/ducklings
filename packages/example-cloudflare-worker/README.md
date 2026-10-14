@@ -13,7 +13,7 @@ This example demonstrates using DuckDB WASM in a Cloudflare Worker to provide a 
 
 - Node.js 18+
 - pnpm 9+
-- Cloudflare account (paid plan required for Workers with >3MB code size)
+- Cloudflare account (choose a plan based on CPU and other runtime requirements)
 
 ## Local Development
 
@@ -123,9 +123,10 @@ The worker is configured via `wrangler.jsonc`:
 
 ## Notes
 
-- **Paid Plan Required**: The DuckDB WASM bundle is close to Cloudflare's paid Worker gzip limit and exceeds the free tier limit of 3MB. Run `wrangler deploy --dry-run --outdir bundled` to verify the final gzip size before deploying.
+- **Bundle Size**: Both plans allow [64 MiB uncompressed per Worker](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Run `wrangler deploy --dry-run --outdir bundled` and check `Total Upload` before deploying.
 - **Cold Start**: First request may be slower due to WASM initialization. Subsequent requests reuse the initialized database.
-- **Memory Limit**: Workers have a 128MB memory limit. Large queries or datasets may exceed this.
+- **Memory Limit**: Each isolate has 128 MB shared by JavaScript, WASM, HTTP buffers, and concurrent requests. DuckDB's `100MB` setting only controls its own memory budget; it does not cap total isolate usage.
+- **CPU and I/O Budgets**: Free allows 10 ms CPU and 50 external subrequests per invocation. Paid defaults to 30 seconds CPU and 10,000 subrequests. DuckDB initialization runs on the first request and consumes that request's CPU budget. See the [runtime budget guide](../documentation/guides/browser-vs-workers.md#workers-runtime-budgets).
 - **No Dynamic Extensions**: The standard build includes Parquet and httpfs. DuckDB's `json` extension is not bundled anymore, and `INSTALL`/`LOAD` will not add it at runtime.
 
 ## License

@@ -2,7 +2,7 @@
 
 DuckDB WASM for Cloudflare Workers with `httpfs`, `avro`, and `iceberg` statically bundled. Async API with full TypeScript support.
 
-> **Important:** This package requires a [Cloudflare Workers Paid Plan](https://developers.cloudflare.com/workers/platform/pricing/) because the final bundle is close to Cloudflare's compressed Worker size limit. Run `wrangler deploy --dry-run --outdir bundled` against your built Worker to verify the final gzip size.
+> Cloudflare allows [64 MiB uncompressed per Worker on both Free and Paid plans](https://developers.cloudflare.com/workers/platform/limits/#worker-size), with no compressed-size limit. Run `wrangler deploy --dry-run --outdir bundled` against your built Worker and check `Total Upload`. Choose a plan based on CPU and other runtime requirements.
 >
 > **Extension note:** The published `@ducklings/workers` package does not bundle DuckDB's `json` extension to stay within Cloudflare's deployment size budget. JSON functions, the `::JSON` type alias, and `read_json()` are therefore not available in the standard package. The published `@ducklings/browser` package omits the same extension for the same reason.
 >
