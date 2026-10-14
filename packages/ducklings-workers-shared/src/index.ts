@@ -365,6 +365,17 @@ interface EmscriptenModule {
   HEAPU32: Uint32Array;
   HEAPF32: Float32Array;
   HEAPF64: Float64Array;
+  /**
+   * Emscripten's filesystem. The workers build exports it — `scripts/build-duckdb.sh`
+   * lists `FS` in `EXPORTED_RUNTIME_METHODS` for this target — which is what makes
+   * registering a file by name possible below.
+   */
+  FS: {
+    mkdir: (path: string) => void;
+    writeFile: (path: string, data: ArrayBuffer | Uint8Array) => void;
+    unlink: (path: string) => void;
+    readFile: (path: string, opts: { encoding: 'binary' }) => Uint8Array;
+  };
 }
 
 // Module state
@@ -1844,6 +1855,88 @@ export class DuckDB {
    */
   static async create(config?: DuckDBConfig): Promise<DuckDB> {
     return new DuckDB(config);
+  }
+
+  private getOpenModule(): EmscriptenModule {
+    if (this.closed) {
+      throw new DuckDBError('Database is closed');
+    }
+    return getModule();
+  }
+
+  /**
+   * Register an in-memory buffer as a file DuckDB can read by name.
+   *
+   * Useful when the bytes are already in hand — fetched from object storage through a
+   * platform binding, say — and there is no URL DuckDB could `httpfs` instead. Mirrors
+   * `registerFileBuffer` in `@ducklings/browser`, which has had this API all along.
+   *
+   * @param name - File name to register, optionally with directories
+   * @param buffer - The file's contents
+   *
+   * @example
+   * ```typescript
+   * await db.registerFileBuffer('data.csv', new TextEncoder().encode('id\n1\n'));
+   * const rows = await conn.query("SELECT * FROM read_csv('data.csv')");
+   * ```
+   */
+  async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+    const mod = this.getOpenModule();
+    const parts = name.split('/').filter(Boolean);
+    let current = '';
+    for (const part of parts.slice(0, -1)) {
+      current += `/${part}`;
+      try {
+        mod.FS.mkdir(current);
+      } catch {
+        // The directory already exists, which is the state we want.
+      }
+    }
+    mod.FS.writeFile(`/${name}`, buffer);
+  }
+
+  /**
+   * Register text as a file, encoded as UTF-8.
+   *
+   * @param name - File name to register
+   * @param text - The file's contents
+   */
+  async registerFileText(name: string, text: string): Promise<void> {
+    await this.registerFileBuffer(name, new TextEncoder().encode(text));
+  }
+
+  /**
+   * Read a registered file back out as bytes.
+   *
+   * The mirror of {@link registerFileBuffer}, and how a query's output leaves the
+   * filesystem — `COPY (…) TO 'x.parquet'`, then this.
+   *
+   * @param name - File name to read
+   * @returns The file's contents
+   *
+   * @example
+   * ```typescript
+   * await conn.query("COPY (SELECT 42 AS answer) TO 'out.parquet' (FORMAT PARQUET)");
+   * const bytes = await db.copyFileToBuffer('out.parquet');
+   * ```
+   */
+  async copyFileToBuffer(name: string): Promise<Uint8Array> {
+    const data = this.getOpenModule().FS.readFile(`/${name}`, { encoding: 'binary' });
+    return data instanceof Uint8Array ? data : new TextEncoder().encode(data);
+  }
+
+  /**
+   * Remove a file registered with {@link registerFileBuffer}.
+   *
+   * @param name - File name to remove
+   */
+  async dropFile(name: string): Promise<void> {
+    const mod = this.getOpenModule();
+    try {
+      mod.FS.unlink(`/${name}`);
+    } catch {
+      // Nothing to remove is already the desired state.
+    }
   }
 
   connect(): Connection {
