@@ -16,7 +16,7 @@ The project publishes five npm packages:
 
 | Package | Description | API Style |
 |---------|-------------|-----------|
-| `@ducklings/browser` | Browser version | Sync |
+| `@ducklings/browser` | Browser version (DuckDB runs in a Web Worker) | Async (Promises) |
 | `@ducklings/workers` | Default Cloudflare Workers package with httpfs and Parquet | Async (Promises) |
 | `@ducklings/workers-iceberg` | Workers with httpfs, Parquet, Avro, and Iceberg | Async (Promises) |
 | `@ducklings/workers-ducklake` | Cloudflare Workers version with DuckLake | Async (Promises) |
@@ -36,7 +36,10 @@ ducklings/
 │   ├── duckdb-httpfs/             # httpfs extension source
 │   ├── duckdb-iceberg/            # Iceberg extension source
 │   ├── duckdb-avro/               # Avro extension source (iceberg dependency)
-│   └── ducklake/                  # DuckLake extension source
+│   ├── duckdb-quack/              # Quack client (DuckLake metadata access)
+│   ├── duckdb-spatial/            # Spatial extension source + GEOS/PROJ vcpkg ports
+│   ├── ducklake/                  # DuckLake extension source
+│   └── nanoarrow/                 # Arrow IPC reader for insertArrowFromIPCStream
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM binary
@@ -45,25 +48,43 @@ ducklings/
 │   ├── duckdb-workers-iceberg.js  # Iceberg Workers JS glue
 │   ├── duckdb-workers-iceberg.wasm # Iceberg Workers WASM binary
 │   ├── duckdb-workers-ducklake.js # DuckLake Workers JS glue (Asyncify)
-│   └── duckdb-workers-ducklake.wasm # DuckLake Workers WASM binary
+│   ├── duckdb-workers-ducklake.wasm # DuckLake Workers WASM binary
+│   ├── duckdb-workers-spatial.js  # Spatial Workers JS glue (Asyncify)
+│   └── duckdb-workers-spatial.wasm # Spatial Workers WASM binary
+├── src/                           # Native glue compiled into every build
+│   ├── http/                      # WASM HTTP client (sync XHR in browser, fetch via Asyncify in Workers)
+│   └── arrow/                     # Arrow IPC insert via nanoarrow
 ├── vcpkg.json                     # vcpkg manifest (iceberg/avro C deps)
 ├── vcpkg_ports/                   # vcpkg overlay ports for WASM compat
 │   ├── aws-c-io/                  # No-op I/O for WASM
 │   ├── liblzma/                   # LITTLE_ENDIAN fix for wasm32
 │   ├── snappy/                    # fPIC fix for wasm32
 │   └── zlib/                      # Build fixes
-├── patches/                       # Source patches for dependencies
-│   └── duckdb/                    # DuckDB-specific patches
-│       └── preloaded_extensions.patch # Makes DuckDB recognize static extensions as preloaded
+├── patches/                       # Source patches for dependencies, one directory per submodule
+│   ├── duckdb/
+│   ├── duckdb-avro/
+│   ├── duckdb-httpfs/
+│   ├── duckdb-iceberg/
+│   ├── duckdb-quack/
+│   └── duckdb-spatial/
 ├── packages/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
+│   ├── ducklings-workers-shared/  # Shared Workers API source (private, not published)
 │   ├── ducklings-workers/         # @ducklings/workers (npm; default)
 │   ├── ducklings-workers-iceberg/ # @ducklings/workers-iceberg (npm)
 │   ├── ducklings-workers-ducklake/ # @ducklings/workers-ducklake (npm)
+│   ├── ducklings-workers-spatial/ # @ducklings/workers-spatial (npm)
+│   ├── documentation/             # TypeDoc site and guides (private)
 │   ├── example-browser/           # Browser example (private)
-│   └── example-cloudflare-worker/ # CF Workers example (private)
+│   ├── example-cloudflare-worker/ # Base CF Workers example (private)
+│   ├── example-cloudflare-worker-iceberg/  # Iceberg CF Workers example (private)
+│   ├── example-cloudflare-worker-ducklake/ # DuckLake CF Workers example (private)
+│   └── example-cloudflare-worker-spatial/  # Spatial CF Workers example + workerd test (private)
 ├── scripts/
-│   └── build-duckdb.sh            # Emscripten build script
+│   ├── build-duckdb.sh            # Emscripten build script
+│   ├── check-worker-size.sh       # Wrangler dry-run upload size check
+│   ├── test-local-worker.sh       # Local workerd integration test
+│   └── test-build-dependencies.py # Tests build-script dependency setup without compiling DuckDB
 └── .github/workflows/
     ├── ci.yml                     # CI (build, test on PR/push)
     └── release.yml                # Release (npm publish on tag)
@@ -83,24 +104,33 @@ ducklings/
 
 ```bash
 # Full build
-make all                  # Build browser WASM + TypeScript package
+make all                  # Build all WASM variants + all TypeScript packages
 
 # WASM compilation (requires Emscripten)
 make duckdb-browser       # Compile browser WASM (~2 min)
 make duckdb-workers       # Compile httpfs/Parquet workers WASM with Asyncify
 make duckdb-workers-iceberg # Compile workers WASM with Avro and Iceberg
 make duckdb-workers-ducklake # Compile DuckLake workers WASM with Asyncify
-make duckdb-all           # Build browser, base Workers, Iceberg, and DuckLake WASM
+make duckdb-workers-spatial # Compile Spatial workers WASM (GEOS + PROJ)
+make duckdb-workers-all   # Build base, Iceberg, DuckLake, and Spatial Workers WASM
+make duckdb-all           # Build browser and all Workers WASM
 
 # TypeScript packages
 make typescript-browser   # Build @ducklings/browser package
 make typescript-workers   # Build @ducklings/workers package
 make typescript-workers-iceberg # Build @ducklings/workers-iceberg package
 make typescript-workers-ducklake # Build @ducklings/workers-ducklake package
-make typescript-all       # Build browser, base Workers, Iceberg, and DuckLake packages
+make typescript-workers-spatial # Build @ducklings/workers-spatial package
+make typescript-all       # Build all five npm packages
+
+# Checks
+make check-worker-ducklake-size # Wrangler dry-run size check for the DuckLake example
+make check-worker-spatial-size  # Wrangler dry-run size check for the Spatial example
 
 # Utilities
 make deps                 # Initialize git submodules
+make sync-versions        # Set all package versions from DUCKDB_VERSION
+make example              # Run the browser example dev server
 make clean                # Clean build artifacts
 ```
 
@@ -136,19 +166,21 @@ Checked against the [general Workers limits](https://developers.cloudflare.com/w
 
 ### TypeScript API
 
-- `packages/ducklings-browser/src/index.ts` - Browser API (sync)
+- `packages/ducklings-browser/src/index.ts` - Browser API entry (async; main-thread classes in `src/async/`, Web Worker side in `src/worker/`)
 - `packages/ducklings-workers-shared/src/index.ts` - Shared Workers API implementation
 - `packages/ducklings-workers/src/index.ts` - @ducklings/workers package entry
 - `packages/ducklings-workers-iceberg/src/index.ts` - @ducklings/workers-iceberg package entry
 - `packages/ducklings-workers-ducklake/src/index.ts` - @ducklings/workers-ducklake package entry
+- `packages/ducklings-workers-spatial/tsup.config.ts` - @ducklings/workers-spatial builds directly from the shared entry (no own `src/index.ts`, no Vite plugin)
 
-Both packages export:
+All packages export:
 - `init()` - Initialize WASM module
 - `DuckDB` - Database class
 - `Connection` - Connection with query/execute methods
 - `PreparedStatement` - Parameterized queries
 - `version()` - Get DuckDB version
-- Flechette re-exports: `tableFromArrays`, `tableFromIPC`, `tableToIPC`
+
+The Workers packages also re-export Flechette's `tableFromArrays`, `tableFromIPC`, and `tableToIPC`; the browser package re-exports only the `Table` type.
 
 ### WASM Build
 
@@ -160,20 +192,28 @@ Both packages export:
 
 ### Patch System
 
-DuckDB source requires patches for WASM compatibility. Patches are stored in `patches/duckdb/` and applied automatically during build.
+DuckDB and several extension sources require patches for WASM compatibility. Patches are stored in `patches/<submodule>/` and applied automatically during build.
 
 **Current Patches:**
 
 | Patch | Purpose |
 |-------|---------|
-| `preloaded_extensions.patch` | Makes DuckDB recognize httpfs, avro, and iceberg as preloaded |
-| `http_util_extension_guard.patch` | Guards HTTP client code behind DUCKDB_DISABLE_EXTENSION_LOAD |
+| `duckdb/preloaded_extensions.patch` | Makes DuckDB recognize the statically linked extensions as preloaded |
+| `duckdb-avro/asyncify_explicit_file_writer_close.patch` | Closes the Avro file writer explicitly instead of in a destructor, so Asyncify can suspend |
+| `duckdb-iceberg/asyncify_explicit_manifest_close.patch` | Closes Iceberg manifest readers/writers explicitly, for the same Asyncify reason |
+| `duckdb-httpfs/s3_preserve_octet_stream_content_type.patch` | Always signs and sends the S3 `content-type` header, including `application/octet-stream` |
+| `duckdb-quack/client_only_wasm.patch`, `message_client_only_wasm.patch` | Compiles out Quack server code under `QUACK_CLIENT_ONLY_WASM` |
+| `duckdb-spatial/emscripten-exceptions.patch` | Enables exception catching in the GEOS and PROJ vcpkg ports |
+| `duckdb-spatial/optional-gdal.patch` | Makes GDAL optional (`SPATIAL_USE_GDAL=OFF`) |
+| `duckdb-spatial/geojson-row-arena.patch` | Copies each GeoJSON result to the string heap and resets the arena per row, bounding memory |
+| `duckdb-spatial/reset-storage.patch` | Renames the R-tree `CommitDrop` override to `ResetStorage` for the DuckDB 1.5 index API |
 
 **How it works:**
 1. Build script calls `apply_patches()` before CMake configuration
-2. Patches are applied with `patch -p1` from the DuckDB source directory
-3. A marker check prevents re-applying already-applied patches
-4. `make clean` resets the submodule to remove patches
+2. `apply_patch_series` applies every `*.patch` in `patches/<submodule>/` with `git apply` inside that submodule
+3. A `git apply --reverse --check` skips patches that are already applied; a patch that applies neither way fails the build
+4. duckdb, httpfs, and Spatial patches apply to every variant (Spatial's vcpkg ports are shared). Avro and Iceberg patches apply only to the iceberg flavor, which includes the browser build. Quack and DuckLake patches apply only to the ducklake flavor.
+5. `make clean` resets the patched submodules to remove patches
 
 **Updating DuckDB version:**
 1. Update `DUCKDB_VERSION` in Makefile
@@ -182,9 +222,9 @@ DuckDB source requires patches for WASM compatibility. Patches are stored in `pa
 4. Run `make duckdb-all` to verify build works
 
 **Creating new patches:**
-1. Make changes to `deps/duckdb/` source files
+1. Make changes to the submodule's source files, e.g. `deps/duckdb/`
 2. Generate patch: `cd deps/duckdb && git diff > ../../patches/duckdb/my_fix.patch`
-3. Add patch application to `apply_patches()` in build script
+3. Patches in an existing `patches/<submodule>/` directory are picked up automatically. For a new submodule, add an `apply_patch_series` call to `apply_patches()` in the build script.
 4. Document the patch purpose in this section
 
 ## GitHub Actions
@@ -215,10 +255,16 @@ Publishing jobs require `id-token: write`, npm 11, and a trusted publisher confi
 
 ### Git Submodules (deps/)
 
-- `duckdb` - DuckDB v1.5.0 source code
-- `duckdb-httpfs` - httpfs extension source
+Refs are pinned in the Makefile (`DUCKDB_*_VERSION`, `NANOARROW_VERSION`); `make pin-versions` checks them out.
+
+- `duckdb` - DuckDB source code (`DUCKDB_VERSION`, currently v1.5.6)
+- `duckdb-httpfs` - httpfs extension source (v1.5-variegata)
 - `duckdb-iceberg` - Iceberg extension source (v1.5-variegata)
-- `duckdb-avro` - Avro extension source (dependency of iceberg)
+- `duckdb-avro` - Avro extension source, dependency of Iceberg (v1.5-variegata)
+- `duckdb-quack` - Quack client used by DuckLake (v1.5-variegata)
+- `ducklake` - DuckLake extension source (v1.5-variegata)
+- `duckdb-spatial` - Spatial extension source and GEOS/PROJ vcpkg ports. Pinned by the submodule commit only; `pin-versions` does not move it.
+- `nanoarrow` - Arrow IPC reader (apache-arrow-nanoarrow-0.9.0)
 
 ### vcpkg Dependencies
 
@@ -242,11 +288,15 @@ Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 | Feature | Browser (`@ducklings/browser`) | Base Workers (`@ducklings/workers`) | Workers DuckLake (`@ducklings/workers-ducklake`) |
 |---------|------------------------------|----------------------------------------|-----------------------------------------------|
-| `init()` | `await init()` or `init(wasmUrl)` | `await init({ wasmModule })` | `await init({ wasmModule })` |
-| `query()` | Returns `T[]` (sync) | Returns `Promise<T[]>` (async) | Returns `Promise<T[]>` (async) |
-| `execute()` | Returns `number` (sync) | Returns `Promise<number>` (async) | Returns `Promise<number>` (async) |
-| `queryArrow()` | Returns `Table` (sync) | Returns `Promise<Table>` (async) | Returns `Promise<Table>` (async) |
-| httpfs | Uses XMLHttpRequest | Uses fetch() via Asyncify | Uses fetch() via Asyncify |
+| `init()` | `await init()`, `init(wasmUrl)`, or `init({ wasmUrl, wasmJsUrl, workerUrl, worker })` | `await init({ wasmModule, httpFetch? })` | `await init({ wasmModule, httpFetch? })` |
+| `connect()` | Returns `Promise<Connection>` | Returns `Connection` (sync) | Returns `Connection` (sync) |
+| `query()` | Returns `Promise<T[]>` | Returns `Promise<T[]>` | Returns `Promise<T[]>` |
+| `execute()` | Returns `Promise<number>` | Returns `Promise<number>` | Returns `Promise<number>` |
+| `queryArrow()` | Returns `Promise<Table>` | Returns `Promise<Table>` | Returns `Promise<Table>` |
+| Execution | In a Web Worker (message protocol) | In the Worker isolate | In the Worker isolate |
+| httpfs | Sync XMLHttpRequest inside the Web Worker | fetch() via Asyncify | fetch() via Asyncify |
+
+`@ducklings/workers-iceberg` and `@ducklings/workers-spatial` have the same API as `@ducklings/workers`.
 
 ## Development Notes
 
@@ -260,13 +310,12 @@ Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 ### No Dynamic Extension Loading
 
-Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions are available: base Workers includes Parquet and httpfs; browser/Workers Iceberg builds include Parquet, httpfs, Avro, and Iceberg; the Workers DuckLake build includes Parquet, httpfs, and DuckLake. The published default builds omit JSON.
+Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions are available: base Workers includes Parquet and httpfs; browser/Workers Iceberg builds include Parquet, httpfs, Avro, and Iceberg; the Workers DuckLake build includes Parquet, httpfs, the Quack client, and DuckLake; the Workers Spatial build includes Parquet, httpfs, and Spatial (GEOS + PROJ, no GDAL). JSON is omitted from the browser and all published Workers builds; only the `debug-workers*` local-debug builds include it.
 
 **Why?** Dynamic extension loading in WASM requires Emscripten's `-sMAIN_MODULE` flag, which significantly increases binary size (~2-3x). This conflicts with the project's goal of minimal footprint.
 
 **What works:**
 - `SELECT * FROM 'https://example.com/data.parquet'` (httpfs + Parquet)
-- `SELECT * FROM read_json('file.json')` (JSON)
 - `SELECT * FROM iceberg_scan('https://example.com/iceberg-table')` (Iceberg)
 - `SELECT * FROM iceberg_snapshots('https://example.com/iceberg-table')` (Iceberg metadata)
 - `SELECT * FROM read_avro('https://example.com/data.avro')` (Avro)

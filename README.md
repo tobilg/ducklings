@@ -623,13 +623,13 @@ make deps
 ### Building
 
 ```bash
-# Full build (browser WASM + TypeScript)
+# Full build (all WASM variants + all TypeScript packages)
 make all
 
-# Build both browser and workers WASM
+# Build browser and all Workers WASM variants
 make duckdb-all
 
-# Build browser, base Workers, Iceberg, and DuckLake TypeScript packages
+# Build all five TypeScript packages
 make typescript-all
 
 # Individual steps
@@ -637,10 +637,12 @@ make duckdb-browser     # Compile browser WASM (~2 min)
 make duckdb-workers     # Compile httpfs/Parquet workers WASM with Asyncify
 make duckdb-workers-iceberg # Compile workers WASM with Avro and Iceberg
 make duckdb-workers-ducklake # Compile DuckLake workers WASM with Asyncify
+make duckdb-workers-spatial # Compile Spatial workers WASM (GEOS + PROJ)
 make typescript-browser # Build @ducklings/browser package
 make typescript-workers # Build @ducklings/workers package
 make typescript-workers-iceberg # Build @ducklings/workers-iceberg package
 make typescript-workers-ducklake # Build @ducklings/workers-ducklake package
+make typescript-workers-spatial # Build @ducklings/workers-spatial package
 
 # Clean and rebuild
 make clean && make all
@@ -727,9 +729,7 @@ All five packages use npm trusted publishing. Complete the [npm setup and initia
    ```bash
    rm -rf build/emscripten build/emscripten-spatial dist
    make duckdb-all
-   make duckdb-workers-spatial
    make typescript-all
-   make typescript-workers-spatial
    pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake --filter @ducklings/workers-spatial -r typecheck
    pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake -r test
    make check-worker-spatial-size
@@ -821,8 +821,15 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 ```
 ducklings/
 ├── Makefile                       # Build orchestration
-├── deps/                          # Git submodules
-│   └── duckdb/                    # DuckDB v1.5.0
+├── deps/                          # Git submodules (refs pinned in Makefile)
+│   ├── duckdb/                    # DuckDB v1.5.6
+│   ├── duckdb-httpfs/             # httpfs extension
+│   ├── duckdb-avro/               # Avro extension (Iceberg dependency)
+│   ├── duckdb-iceberg/            # Iceberg extension
+│   ├── duckdb-quack/              # Quack client (DuckLake)
+│   ├── ducklake/                  # DuckLake extension
+│   ├── duckdb-spatial/            # Spatial extension
+│   └── nanoarrow/                 # Arrow IPC reader
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
 │   ├── duckdb.wasm                # Browser WASM (~6.3 MiB gzipped)
@@ -831,7 +838,9 @@ ducklings/
 │   ├── duckdb-workers-iceberg.js  # Iceberg Workers JS glue
 │   ├── duckdb-workers-iceberg.wasm # Iceberg Workers WASM
 │   ├── duckdb-workers-ducklake.js # DuckLake Workers JS glue (with Asyncify)
-│   └── duckdb-workers-ducklake.wasm # DuckLake Workers WASM
+│   ├── duckdb-workers-ducklake.wasm # DuckLake Workers WASM
+│   ├── duckdb-workers-spatial.js  # Spatial Workers JS glue (with Asyncify)
+│   └── duckdb-workers-spatial.wasm # Spatial Workers WASM
 ├── packages/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
 │   │   ├── src/index.ts           # Browser entry point
@@ -850,14 +859,20 @@ ducklings/
 │   │   └── dist/                  # Built package
 │   │       ├── index.js           # ESM bundle
 │   │       └── wasm/              # WASM files
+│   ├── ducklings-workers-spatial/ # @ducklings/workers-spatial (npm; built from the shared entry)
+│   ├── documentation/             # TypeDoc site and guides
 │   ├── example-browser/           # Browser example
-│   └── example-cloudflare-worker/ # CF Workers example
+│   ├── example-cloudflare-worker/ # Base CF Workers example
+│   ├── example-cloudflare-worker-iceberg/  # Iceberg CF Workers example
+│   ├── example-cloudflare-worker-ducklake/ # DuckLake CF Workers example
+│   └── example-cloudflare-worker-spatial/  # Spatial CF Workers example
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                 # CI workflow (build, test)
 │       └── release.yml            # Release workflow (npm publish)
 └── scripts/
-    └── build-duckdb.sh            # Emscripten build script
+    ├── build-duckdb.sh            # Emscripten build script
+    └── check-worker-size.sh       # Worker upload size check
 ```
 
 ## Architecture

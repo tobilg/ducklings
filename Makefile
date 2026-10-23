@@ -44,10 +44,13 @@ WORKERS_ICEBERG_WASM := $(DIST_DIR)/duckdb-workers-iceberg.wasm
 WORKERS_ICEBERG_JS := $(DIST_DIR)/duckdb-workers-iceberg.js
 WORKERS_DUCKLAKE_WASM := $(DIST_DIR)/duckdb-workers-ducklake.wasm
 WORKERS_DUCKLAKE_JS := $(DIST_DIR)/duckdb-workers-ducklake.js
+WORKERS_SPATIAL_WASM := $(DIST_DIR)/duckdb-workers-spatial.wasm
+WORKERS_SPATIAL_JS := $(DIST_DIR)/duckdb-workers-spatial.js
 BROWSER_PACKAGE_STAMP := packages/ducklings-browser/dist/.build.stamp
 WORKERS_PACKAGE_STAMP := packages/ducklings-workers/dist/.build.stamp
 WORKERS_ICEBERG_PACKAGE_STAMP := packages/ducklings-workers-iceberg/dist/.build.stamp
 WORKERS_DUCKLAKE_PACKAGE_STAMP := packages/ducklings-workers-ducklake/dist/.build.stamp
+WORKERS_SPATIAL_PACKAGE_STAMP := packages/ducklings-workers-spatial/dist/.build.stamp
 
 SYNC_VERSION_FILES := \
 	packages/ducklings-browser/package.json \
@@ -77,6 +80,11 @@ NATIVE_BUILD_SOURCES := \
 	$(call find_files,deps/ducklake) \
 	$(call find_files,deps/duckdb-spatial/vcpkg_ports) \
 	$(call find_files,deps/nanoarrow)
+
+# Only the Spatial build compiles the Spatial extension sources.
+SPATIAL_NATIVE_BUILD_SOURCES := \
+	$(NATIVE_BUILD_SOURCES) \
+	$(call find_files,deps/duckdb-spatial)
 
 PNPM_MANIFESTS := $(wildcard package.json pnpm-lock.yaml pnpm-workspace.yaml)
 
@@ -115,7 +123,15 @@ WORKERS_DUCKLAKE_PACKAGE_SOURCES := \
 	packages/ducklings-workers-ducklake/tsup.config.ts \
 	$(PNPM_MANIFESTS)
 
-.PHONY: all clean rebuild deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-all duckdb-all typescript typescript-browser typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-all typescript-all check-deps check-worker-ducklake-size show-versions example help
+WORKERS_SPATIAL_PACKAGE_SOURCES := \
+	$(WORKERS_SHARED_SOURCES) \
+	$(call find_files,packages/ducklings-workers-spatial/src) \
+	packages/ducklings-workers-spatial/package.json \
+	packages/ducklings-workers-spatial/tsconfig.json \
+	packages/ducklings-workers-spatial/tsup.config.ts \
+	$(PNPM_MANIFESTS)
+
+.PHONY: all clean rebuild deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-spatial duckdb-workers-all duckdb-all typescript typescript-browser typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-spatial typescript-workers-all typescript-all check-deps check-worker-ducklake-size check-worker-spatial-size show-versions example help
 
 all: check-deps deps duckdb-all typescript-all
 
@@ -207,9 +223,20 @@ $(WORKERS_DUCKLAKE_WASM): $(NATIVE_BUILD_SOURCES)
 $(WORKERS_DUCKLAKE_JS): $(WORKERS_DUCKLAKE_WASM)
 	@test -f $@ || ./scripts/build-duckdb.sh workers-ducklake
 
-duckdb-workers-all: duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake
+# Spatial Worker build: full spatial, Parquet, and HTTP; no lakehouse extensions.
+duckdb-workers-spatial: $(WORKERS_SPATIAL_WASM) $(WORKERS_SPATIAL_JS)
 
-# Build both browser and workers WASM
+$(WORKERS_SPATIAL_WASM): $(SPATIAL_NATIVE_BUILD_SOURCES)
+	./scripts/build-duckdb.sh workers-spatial
+	@test -f $(WORKERS_SPATIAL_JS)
+	@test -f $@
+
+$(WORKERS_SPATIAL_JS): $(WORKERS_SPATIAL_WASM)
+	@test -f $@ || ./scripts/build-duckdb.sh workers-spatial
+
+duckdb-workers-all: duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-spatial
+
+# Build browser and all Workers WASM variants
 duckdb-all: duckdb-browser duckdb-workers-all
 
 # Build TypeScript packages
@@ -249,13 +276,24 @@ $(WORKERS_DUCKLAKE_PACKAGE_STAMP): $(SYNC_VERSIONS_STAMP) $(WORKERS_DUCKLAKE_WAS
 	@test -f packages/ducklings-workers-ducklake/dist/wasm/duckdb-workers.wasm
 	@touch $@
 
-typescript-workers-all: typescript-workers typescript-workers-iceberg typescript-workers-ducklake
+typescript-workers-spatial: $(WORKERS_SPATIAL_PACKAGE_STAMP)
+
+$(WORKERS_SPATIAL_PACKAGE_STAMP): $(SYNC_VERSIONS_STAMP) $(WORKERS_SPATIAL_WASM) $(WORKERS_SPATIAL_JS) $(WORKERS_SPATIAL_PACKAGE_SOURCES)
+	cd packages/ducklings-workers-spatial && CI=true pnpm install --frozen-lockfile && pnpm build
+	@test -f packages/ducklings-workers-spatial/dist/index.js
+	@test -f packages/ducklings-workers-spatial/dist/wasm/duckdb-workers.wasm
+	@touch $@
+
+typescript-workers-all: typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-spatial
 
 # Build all TypeScript packages
 typescript-all: typescript-browser typescript-workers-all
 
 check-worker-ducklake-size:
 	bash scripts/check-worker-size.sh packages/example-cloudflare-worker-ducklake
+
+check-worker-spatial-size:
+	bash scripts/check-worker-size.sh packages/example-cloudflare-worker-spatial
 
 # Clean all build artifacts
 clean:
@@ -266,11 +304,13 @@ clean:
 	cd deps/duckdb-avro && git checkout -- . || true
 	cd deps/duckdb-quack && git checkout -- . || true
 	cd deps/ducklake && git checkout -- . || true
+	cd deps/duckdb-spatial && git checkout -- . || true
 	rm -rf vcpkg_installed
 	cd packages/ducklings-browser && rm -rf node_modules dist || true
 	cd packages/ducklings-workers && rm -rf node_modules dist || true
 	cd packages/ducklings-workers-iceberg && rm -rf node_modules dist || true
 	cd packages/ducklings-workers-ducklake && rm -rf node_modules dist || true
+	cd packages/ducklings-workers-spatial && rm -rf node_modules dist || true
 
 # Fresh build from scratch
 rebuild: clean all
@@ -292,7 +332,7 @@ show-versions:
 
 # Run browser example (dev server)
 example:
-	cd examples/browser && pnpm install && pnpm dev
+	cd packages/example-browser && pnpm install && pnpm dev
 
 # Help
 help:
@@ -307,15 +347,19 @@ help:
 	@echo "  duckdb-workers     - CF Workers WASM with httpfs and Parquet"
 	@echo "  duckdb-workers-iceberg - CF Workers WASM with httpfs, Avro, Iceberg"
 	@echo "  duckdb-workers-ducklake - CF Workers WASM with httpfs, DuckLake"
-	@echo "  duckdb-workers-all - Build base, Iceberg, and DuckLake workers WASM"
-	@echo "  duckdb-all         - Build browser, base Workers, Iceberg, and DuckLake WASM"
+	@echo "  duckdb-workers-spatial - CF Workers WASM with httpfs, Spatial (GEOS + PROJ)"
+	@echo "  duckdb-workers-all - Build base, Iceberg, DuckLake, and Spatial workers WASM"
+	@echo "  duckdb-all         - Build browser and all workers WASM"
 	@echo "  typescript         - Build browser TypeScript package"
 	@echo "  typescript-browser - Build @ducklings/browser package"
 	@echo "  typescript-workers - Build @ducklings/workers package"
 	@echo "  typescript-workers-iceberg - Build @ducklings/workers-iceberg package"
 	@echo "  typescript-workers-ducklake - Build @ducklings/workers-ducklake package"
-	@echo "  typescript-workers-all - Build default, Iceberg, and DuckLake TypeScript packages"
+	@echo "  typescript-workers-spatial - Build @ducklings/workers-spatial package"
+	@echo "  typescript-workers-all - Build default, Iceberg, DuckLake, and Spatial TypeScript packages"
 	@echo "  typescript-all     - Build all TypeScript packages"
+	@echo "  check-worker-ducklake-size - Check the DuckLake example Worker upload size"
+	@echo "  check-worker-spatial-size  - Check the Spatial example Worker upload size"
 	@echo "  clean              - Remove all build artifacts"
 	@echo "  rebuild            - Clean and rebuild everything"
 	@echo "  check-deps         - Verify required tools are installed"
@@ -329,13 +373,3 @@ help:
 	@echo "  make duckdb-all      - Build browser and workers WASM"
 	@echo "  make typescript-all  - Build all TypeScript packages"
 
-# Spatial Worker build: full spatial, Parquet, and HTTP; no lakehouse extensions.
-.PHONY: duckdb-workers-spatial typescript-workers-spatial check-worker-spatial-size
-duckdb-workers-spatial:
-	./scripts/build-duckdb.sh workers-spatial
-
-typescript-workers-spatial:
-	pnpm --filter @ducklings/workers-spatial build
-
-check-worker-spatial-size:
-	bash scripts/check-worker-size.sh packages/example-cloudflare-worker-spatial
