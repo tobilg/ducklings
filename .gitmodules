@@ -28,4 +28,4 @@
 [submodule "deps/duckdb-spatial"]
 	path = deps/duckdb-spatial
 	url = https://github.com/duckdb/duckdb-spatial.git
-	branch = v1.5-variegata
+	branch = v2.0-cyanoptera
