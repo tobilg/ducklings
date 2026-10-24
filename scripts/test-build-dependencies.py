@@ -74,7 +74,7 @@ export EMSCRIPTEN_ROOT=/test-emscripten
 git() {
     case "$1" in fetch|checkout) return 0 ;; *) command git "$@" ;; esac
 }
-check_emscripten() { :; }
+check_emscripten() { EMCC_VERSION=test; }
 configure_duckdb() { echo configure >> "$FIXTURE_ROOT/calls.log"; }
 build_duckdb() { :; }
 build_httpfs() { :; }
