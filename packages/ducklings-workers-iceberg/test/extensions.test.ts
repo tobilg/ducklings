@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DuckDB } from './testDb';
+import { DuckDB, DuckDBError, httpTransport } from './testDb';
 import { ducklingsWorkerPlugin, getWasmPath } from '../dist/vite-plugin.js';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,27 @@ describe('Iceberg package isolation', () => {
       );
       expect(functions).toEqual([{ function_name: 'iceberg_scan' }, { function_name: 'read_avro' }]);
     } finally {
+      conn.close();
+      db.close();
+    }
+  });
+
+  // httpfs's FileExists reports a 404 as false from a catch block, so Iceberg moves on to its own error.
+  it('treats a missing remote version hint as absent', async () => {
+    const defaultFetch = httpTransport.fetch;
+    httpTransport.fetch = () => Promise.resolve(new Response(null, { status: 404 }));
+    const db = new DuckDB({ lockConfiguration: false });
+    const conn = db.connect();
+    try {
+      await conn.execute('SET http_retries = 0');
+      await expect(conn.query("SELECT * FROM iceberg_metadata('http://ducklings.invalid/table')")).rejects.toThrow(
+        DuckDBError,
+      );
+      await expect(conn.query("SELECT * FROM iceberg_metadata('http://ducklings.invalid/table')")).rejects.toThrow(
+        /no version-hint could be found/,
+      );
+    } finally {
+      httpTransport.fetch = defaultFetch;
       conn.close();
       db.close();
     }

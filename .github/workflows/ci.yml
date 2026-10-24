@@ -55,6 +55,7 @@ jobs:
         with:
           path: |
             build/emscripten
+            build/emscripten-browser
             build/emscripten-spatial
           key: duckdb-wasm-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-duckdb.sh', 'Makefile', 'patches/**', 'vcpkg.json', 'vcpkg_ports/**', 'deps/duckdb-spatial/vcpkg_ports/**') }}
           restore-keys: |
@@ -68,6 +69,7 @@ jobs:
           # CMake cache contains hardcoded Emscripten paths that change each run
           # Remove cache files but keep compiled objects to speed up rebuilds
           rm -rf build/emscripten/CMakeCache.txt build/emscripten/CMakeFiles
+          rm -rf build/emscripten-browser/CMakeCache.txt build/emscripten-browser/CMakeFiles
           rm -rf build/emscripten-spatial/CMakeCache.txt build/emscripten-spatial/CMakeFiles
 
       - name: Build browser WASM

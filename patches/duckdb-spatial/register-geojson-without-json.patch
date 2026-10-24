@@ -1,0 +1,27 @@
+diff --git a/src/spatial/modules/main/spatial_functions_scalar.cpp b/src/spatial/modules/main/spatial_functions_scalar.cpp
+--- a/src/spatial/modules/main/spatial_functions_scalar.cpp
++++ b/src/spatial/modules/main/spatial_functions_scalar.cpp
+@@ -9527,7 +9527,11 @@
+ void RegisterSpatialScalarFunctions(ExtensionLoader &loader) {
+ 	ST_Affine::Register(loader);
+ 	ST_Area::Register(loader);
+-	// ST_AsGeoJSON::Register(loader);
++	// DuckDB's json extension provides ST_AsGeoJSON and ST_GeomFromGeoJSON; builds without it keep spatial's own.
++	const bool json_loaded = loader.GetDatabaseInstance().ExtensionIsLoaded("json");
++	if (!json_loaded) {
++		ST_AsGeoJSON::Register(loader);
++	}
+ 	ST_AsText::Register(loader);
+ 	// ST_AsWKB::Register(loader);
+ 	ST_AsHEXWKB::Register(loader);
+@@ -9554,7 +9558,9 @@
+ 	ST_Force4D::Register(loader);
+ 	ST_GeometryType::Register(loader);
+ 	ST_GeomFromHEXWKB::Register(loader);
+-	// ST_GeomFromGeoJSON::Register(loader);
++	if (!json_loaded) {
++		ST_GeomFromGeoJSON::Register(loader);
++	}
+ 	ST_GeomFromText::Register(loader);
+ 	ST_GeomFromWKB::Register(loader);
+ 	ST_HasZ::Register(loader);

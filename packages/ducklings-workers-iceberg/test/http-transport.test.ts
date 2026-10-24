@@ -67,4 +67,22 @@ describe('HTTP transport failures (Async)', () => {
     await expect(conn.query(REMOTE_QUERY)).rejects.toThrow(DuckDBError);
     await expectConnectionUsable();
   });
+
+  // httpfs falls back inside catch blocks when Content-Length is not numeric: the HEAD length probe, then the full
+  // GET it falls back to. They only run when the extension objects are compiled with exception catching, like core.
+  it('should read a file whose Content-Length is not numeric', async () => {
+    httpTransport.fetch = (_url, init) =>
+      Promise.resolve(
+        new Response(init.method === 'HEAD' ? null : 'a,b\n1,2\n', {
+          status: 200,
+          headers: { 'Content-Length': 'not-a-number' },
+        }),
+      );
+
+    const rows = await conn.query<{ a: number; b: number }>(
+      "SELECT a::INTEGER AS a, b::INTEGER AS b FROM read_csv('http://ducklings.invalid/data.csv')",
+    );
+    expect(rows).toEqual([{ a: 1, b: 2 }]);
+    await expectConnectionUsable();
+  });
 });

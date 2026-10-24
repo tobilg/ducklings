@@ -38,7 +38,7 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 - **httpfs support**: Load remote files via HTTP/HTTPS
 - **JSON support**: Not bundled in the published browser or workers packages to keep builds small; use a custom build if you need DuckDB's `json` extension
 - **Cloudflare Workers**: First-class support with dedicated Iceberg, DuckLake, and Spatial async packages
-- **Browser support**: Works in modern browsers with ES modules
+- **Browser support**: Works in modern browsers with ES modules and WebAssembly exception handling (Chrome 95+, Firefox 100+, Safari 15.2+)
 
 ## Extension Availability
 
@@ -46,8 +46,8 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 |---------------------|---------------------|---------------------|----------------------------|-----------------------------|----------------------------|
 | `parquet` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | `httpfs` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| `avro` | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: |
-| `iceberg` | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: |
+| `avro` | :x: | :x: | :white_check_mark: | :x: | :x: |
+| `iceberg` | :x: | :x: | :white_check_mark: | :x: | :x: |
 | `ducklake` | :x: | :x: | :x: | :white_check_mark: | :x: |
 | `spatial` | :x: | :x: | :x: | :x: | :white_check_mark: |
 | `json` | :x: | :x: | :x: | :x: | :x: |
@@ -137,10 +137,11 @@ export default {
 
 | Package | API Style | Size (gzipped) | Extension focus |
 |---------|-----------|----------------|-----------------|
-| `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | Browser + Iceberg |
-| `@ducklings/workers` | Async (Asyncify) | ~9.3 MiB | httpfs + Parquet |
-| `@ducklings/workers-iceberg` | Async (Asyncify) | ~10 MiB | httpfs + Parquet + Avro + Iceberg |
-| `@ducklings/workers-ducklake` | Async (Asyncify) | Measured during build | Workers + DuckLake |
+| `@ducklings/browser` | Async (Web Worker) | ~7.2 MiB | httpfs + Parquet |
+| `@ducklings/workers` | Async (Asyncify) | ~12.6 MiB | httpfs + Parquet |
+| `@ducklings/workers-iceberg` | Async (Asyncify) | ~13.7 MiB | httpfs + Parquet + Avro + Iceberg |
+| `@ducklings/workers-ducklake` | Async (Asyncify) | ~13.5 MiB | Workers + DuckLake |
+| `@ducklings/workers-spatial` | Async (Asyncify) | ~15.8 MiB | Workers + Spatial (GEOS + PROJ) |
 
 #### Arrow IPC Endpoint
 
@@ -187,7 +188,7 @@ table = reader.read_all()
 
 ```typescript
 // JavaScript (Flechette)
-import { tableFromIPC } from '@ducklings/browser';
+import { tableFromIPC } from '@uwdata/flechette';
 const response = await fetch('https://your-worker.dev/arrow');
 const bytes = new Uint8Array(await response.arrayBuffer());
 const table = tableFromIPC(bytes);
@@ -223,7 +224,7 @@ Load directly from jsDelivr or unpkg - cross-origin workers are handled automati
 
 ```html
 <script type="module">
-  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@1.5.3/+esm';
+  import { init, DuckDB } from 'https://cdn.jsdelivr.net/npm/@ducklings/browser@2.0.0/+esm';
 
   await init();
 
@@ -653,13 +654,13 @@ make clean && make all
 All npm packages use the same version, derived from `DUCKDB_VERSION` in the Makefile:
 
 ```
-Makefile: DUCKDB_VERSION := v1.5.6
+Makefile: DUCKDB_VERSION := v2.0.0
                 ↓
-    @ducklings/browser@1.5.6
-    @ducklings/workers@1.5.6
-    @ducklings/workers-iceberg@1.5.6
-    @ducklings/workers-ducklake@1.5.6
-    @ducklings/workers-spatial@1.5.6
+    @ducklings/browser@2.0.0
+    @ducklings/workers@2.0.0
+    @ducklings/workers-iceberg@2.0.0
+    @ducklings/workers-ducklake@2.0.0
+    @ducklings/workers-spatial@2.0.0
 ```
 
 To update the version, change `DUCKDB_VERSION` in the Makefile. The version is automatically synced to package manifests during the build process via `make sync-versions`.
@@ -680,16 +681,16 @@ For development/prerelease versions, use `VERSION_SUFFIX`:
 # Build with dev version suffix
 make sync-versions VERSION_SUFFIX=-dev.1
 make show-versions VERSION_SUFFIX=-dev.1
-# Output: npm packages: 1.5.0-dev.1
+# Output: npm packages: 2.0.0-dev.1
 ```
 
 Or set it in the Makefile:
 
 ```makefile
-VERSION_SUFFIX := -dev.1    # Results in 1.5.0-dev.1
-VERSION_SUFFIX := -alpha.0  # Results in 1.5.0-alpha.0
-VERSION_SUFFIX := -beta.1   # Results in 1.5.0-beta.1
-VERSION_SUFFIX := -rc.1     # Results in 1.5.0-rc.1
+VERSION_SUFFIX := -dev.1    # Results in 2.0.0-dev.1
+VERSION_SUFFIX := -alpha.0  # Results in 2.0.0-alpha.0
+VERSION_SUFFIX := -beta.1   # Results in 2.0.0-beta.1
+VERSION_SUFFIX := -rc.1     # Results in 2.0.0-rc.1
 VERSION_SUFFIX :=           # Empty for stable release
 ```
 
@@ -709,21 +710,23 @@ All five packages use npm trusted publishing. Complete the [npm setup and initia
 
 **Stable release (new DuckDB version):**
 
-1. Update `DUCKDB_VERSION` in Makefile:
+1. Update the pins in Makefile. Take the extension SHAs from DuckDB's own `.github/config/extensions/<name>.cmake` at the new tag (`GIT_TAG`), so every extension matches the engine it is built against:
    ```makefile
-   DUCKDB_VERSION := v1.5.6
+   DUCKDB_VERSION := v2.0.0
+   DUCKDB_HTTPFS_VERSION := <sha from httpfs.cmake>
+   # ... iceberg, avro, quack, ducklake, spatial likewise
    VERSION_SUFFIX :=
    ```
+   If the Avro pin moves, update `REF` and `SHA512` in `vcpkg_ports/avro-c/portfile.cmake` to the `third_party/avro-c` commit it vendors.
 
-2. Update the DuckDB submodule after removing locally applied build patches:
+2. Check out the new pins after removing locally applied build patches:
    ```bash
-   git -C deps/duckdb apply --reverse ../../patches/duckdb/preloaded_extensions.patch
-   git -C deps/duckdb fetch origin tag v1.5.6
-   git -C deps/duckdb checkout v1.5.6
+   for d in deps/*; do git -C "$d" checkout -- .; done
+   make pin-versions
    make sync-versions
    ```
 
-   Skip the reverse-patch command on a clean checkout. Preserve any intentional source edits before switching versions. To also update the extension branches, use `make pin-versions`; it fast-forwards every configured dependency branch.
+   Preserve any intentional source edits before resetting. Then check every patch with `git -C deps/<submodule> apply --check ../../patches/<submodule>/<patch>`, and drop patches that upstream has absorbed.
 
 3. Rebuild and validate all five variants:
    ```bash
@@ -741,8 +744,8 @@ All five packages use npm trusted publishing. Complete the [npm setup and initia
 4. Commit the Makefile, updated submodule references, package manifests, and any compatibility fixes, then tag:
    ```bash
    git add -A
-   git commit -m "Bump DuckDB to v1.5.6"
-   git tag v1.5.6
+   git commit -m "Bump DuckDB to v2.0.0"
+   git tag v2.0.0
    git push origin main --tags
    ```
 
@@ -797,7 +800,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 │   dist/               │               │               │   dist/               │
 │   ├── duckdb.js       │               │               │   ├── duckdb-workers  │
 │   └── duckdb.wasm     │               │               │   │   .js             │
-│      (~6.3MiB gz)     │               │               │   └── duckdb-workers  │
+│      (~7.2MiB gz)     │               │               │   └── duckdb-workers  │
 └───────────┬───────────┘               │               │       .wasm (base)    │
             │                           │               └───────────┬───────────┘
             │                           │                           │
@@ -822,7 +825,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 ducklings/
 ├── Makefile                       # Build orchestration
 ├── deps/                          # Git submodules (refs pinned in Makefile)
-│   ├── duckdb/                    # DuckDB v1.5.6
+│   ├── duckdb/                    # DuckDB v2.0.0
 │   ├── duckdb-httpfs/             # httpfs extension
 │   ├── duckdb-avro/               # Avro extension (Iceberg dependency)
 │   ├── duckdb-iceberg/            # Iceberg extension
@@ -832,7 +835,7 @@ ducklings/
 │   └── nanoarrow/                 # Arrow IPC reader
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
-│   ├── duckdb.wasm                # Browser WASM (~6.3 MiB gzipped)
+│   ├── duckdb.wasm                # Browser WASM (~7.2 MiB gzipped)
 │   ├── duckdb-workers.js          # Base Workers JS glue (with Asyncify)
 │   ├── duckdb-workers.wasm        # Base Workers WASM (httpfs + Parquet)
 │   ├── duckdb-workers-iceberg.js  # Iceberg Workers JS glue
@@ -892,7 +895,7 @@ ducklings/
 │  Type marshalling, memory management, HEAP access               │
 ├─────────────────────────────────┬───────────────────────────────┤
 │  @ducklings/browser             │   @ducklings/workers          │
-│  Browser WASM (~6.3MiB gz)      │   Workers WASM (base)        │
+│  Browser WASM (~7.2MiB gz)      │   Workers WASM (base)        │
 │  - Web Worker + XMLHttpRequest  │   - Asyncify + fetch()        │
 │  - Async API (Promises)         │   - Async API (Promises)      │
 └─────────────────────────────────┴───────────────────────────────┘
@@ -904,7 +907,7 @@ ducklings/
 2. **No file system**: In-memory databases only (use httpfs for remote files)
 3. **No threads**: Single-threaded execution
 4. **WASM_BIGINT=0**: 64-bit integers passed as two 32-bit values (handled internally)
-5. **No dynamic extension loading**: Only statically compiled extensions are available. The default Workers build includes Parquet and httpfs. The browser and Workers Iceberg builds additionally include Avro and Iceberg. None includes JSON. `INSTALL`/`LOAD` commands for other extensions will not work. Dynamic loading requires Emscripten's `-sMAIN_MODULE` flag which significantly increases binary size (~2-3x)
+5. **No dynamic extension loading**: Only statically compiled extensions are available. The browser and default Workers builds include Parquet and httpfs. The Workers Iceberg build additionally includes Avro and Iceberg. None includes JSON. `INSTALL`/`LOAD` commands for other extensions will not work. Dynamic loading requires Emscripten's `-sMAIN_MODULE` flag which significantly increases binary size (~2-3x)
 
 ## License
 

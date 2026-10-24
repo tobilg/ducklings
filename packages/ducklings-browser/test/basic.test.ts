@@ -18,6 +18,16 @@ describe('DuckDB Basic Operations', () => {
 
   // Note: Don't close connection - it's shared across test files via getDB()
 
+  describe('bundled extensions', () => {
+    it('should bundle only httpfs and Parquet', async () => {
+      const extensions = (
+        await conn.query<{ extension_name: string }>('SELECT extension_name FROM duckdb_extensions() WHERE loaded')
+      ).map((row) => row.extension_name);
+      for (const name of ['httpfs', 'parquet']) expect(extensions).toContain(name);
+      for (const name of ['avro', 'iceberg', 'ducklake', 'spatial', 'json']) expect(extensions).not.toContain(name);
+    });
+  });
+
   describe('version()', () => {
     it('should return the configured DuckDB version', async () => {
       const v = await version();

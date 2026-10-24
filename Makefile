@@ -6,12 +6,14 @@ DIST_DIR := dist
 
 # Version pinning - npm packages use this version (without 'v' prefix)
 # For dev releases, set VERSION_SUFFIX (e.g., -dev.1, -alpha.0, -beta.1)
-DUCKDB_VERSION := v1.5.6
-DUCKDB_HTTPFS_VERSION := v1.5-variegata
-DUCKDB_ICEBERG_VERSION := v1.5-variegata
-DUCKDB_AVRO_VERSION := v1.5-variegata
-DUCKDB_QUACK_VERSION := v1.5-variegata
-DUCKDB_DUCKLAKE_VERSION := v1.5-variegata
+DUCKDB_VERSION := v2.0.0
+# Extension commits pinned by DuckDB v2.0.0 itself (.github/config/extensions/*.cmake)
+DUCKDB_HTTPFS_VERSION := 77392a72077a85897db2519fae11e2c0da972b8a
+DUCKDB_ICEBERG_VERSION := 4c0c0874c48ec82a3e29910554891d04bcc0e988
+DUCKDB_AVRO_VERSION := 758fb6063cbb6da49b2e1c16c4044cfcafefc52f
+DUCKDB_QUACK_VERSION := f96420ed46aee9c42064bdb99ddfd1230d6c0086
+DUCKDB_DUCKLAKE_VERSION := 417a9117f590e8141742ac0579d02f6a90162e37
+DUCKDB_SPATIAL_VERSION := 4e066c17e2d1f24625baff4c62430d68ceb4e41f
 NANOARROW_VERSION := apache-arrow-nanoarrow-0.9.0
 VCPKG_BASELINE := 84bab45d415d22042bd0b9081aea57f362da3f35
 VERSION_SUFFIX :=
@@ -31,6 +33,7 @@ cd $(1) && git fetch origin --tags && \
 		fi; \
 		git merge --ff-only "origin/$(2)"; \
 	else \
+		git cat-file -e "$(2)^{commit}" 2>/dev/null || git fetch origin "$(2)"; \
 		git checkout "$(2)"; \
 	fi
 endef
@@ -140,7 +143,7 @@ deps:
 	git submodule init
 	$(MAKE) pin-versions
 
-# Pin all dependencies to configured refs. Branch refs fast-forward to origin.
+# Pin all dependencies to configured refs. Branch refs fast-forward to origin; tags and SHAs are checked out as-is.
 pin-versions:
 	@echo "Pinning deps/duckdb to $(DUCKDB_VERSION)"
 	@$(call checkout_dependency_version,deps/duckdb,$(DUCKDB_VERSION))
@@ -150,10 +153,13 @@ pin-versions:
 	@$(call checkout_dependency_version,deps/duckdb-iceberg,$(DUCKDB_ICEBERG_VERSION))
 	@echo "Pinning deps/duckdb-avro to $(DUCKDB_AVRO_VERSION)"
 	@$(call checkout_dependency_version,deps/duckdb-avro,$(DUCKDB_AVRO_VERSION))
+	git -C deps/duckdb-avro submodule update --init third_party/avro-c
 	@echo "Pinning deps/duckdb-quack to $(DUCKDB_QUACK_VERSION)"
 	@$(call checkout_dependency_version,deps/duckdb-quack,$(DUCKDB_QUACK_VERSION))
 	@echo "Pinning deps/ducklake to $(DUCKDB_DUCKLAKE_VERSION)"
 	@$(call checkout_dependency_version,deps/ducklake,$(DUCKDB_DUCKLAKE_VERSION))
+	@echo "Pinning deps/duckdb-spatial to $(DUCKDB_SPATIAL_VERSION)"
+	@$(call checkout_dependency_version,deps/duckdb-spatial,$(DUCKDB_SPATIAL_VERSION))
 	@echo "Pinning deps/nanoarrow to $(NANOARROW_VERSION)"
 	@$(call checkout_dependency_version,deps/nanoarrow,$(NANOARROW_VERSION))
 
@@ -302,6 +308,7 @@ clean:
 	cd deps/duckdb-httpfs && git checkout -- . || true
 	cd deps/duckdb-iceberg && git checkout -- . || true
 	cd deps/duckdb-avro && git checkout -- . || true
+	cd deps/duckdb-avro/third_party/avro-c && git checkout -- . || true
 	cd deps/duckdb-quack && git checkout -- . || true
 	cd deps/ducklake && git checkout -- . || true
 	cd deps/duckdb-spatial && git checkout -- . || true
@@ -318,7 +325,7 @@ rebuild: clean all
 # Check required tools are installed
 check-deps:
 	@echo "Checking required dependencies..."
-	@command -v emcc >/dev/null 2>&1 || { echo "emcc not found. Install: brew install emscripten"; exit 1; }
+	@command -v emcc >/dev/null 2>&1 || { echo "emcc not found. Install and activate Emscripten SDK 4.0.22 (emsdk install 4.0.22 && emsdk activate 4.0.22)"; exit 1; }
 	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm not found. Install: npm install -g pnpm"; exit 1; }
 	@command -v cmake >/dev/null 2>&1 || { echo "cmake not found. Install: brew install cmake"; exit 1; }
 	@emcc --version | head -n1

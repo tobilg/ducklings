@@ -109,7 +109,7 @@ The plugin:
 ## Features
 
 - Async API - all query methods return Promises
-- ~9.9 MiB gzipped WASM (includes Asyncify)
+- ~13.7 MiB gzipped WASM (includes Asyncify)
 - Built-in Parquet and httpfs extensions
 - Full httpfs support via async `fetch()`
 - Arrow Table support via Flechette (query + insert)
@@ -124,8 +124,8 @@ The published browser and workers packages do not bundle the `json` extension. R
 
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
-| `@ducklings/browser` | Async (Web Worker) | ~6.3 MiB | XMLHttpRequest |
-| `@ducklings/workers-iceberg` | Async (Asyncify) | ~9.9 MiB | fetch() via Asyncify |
+| `@ducklings/browser` | Async (Web Worker) | ~7.2 MiB | XMLHttpRequest |
+| `@ducklings/workers-iceberg` | Async (Asyncify) | ~13.7 MiB | fetch() via Asyncify |
 
 ## API
 
@@ -294,7 +294,7 @@ await conn.insertArrowFromIPCStream('my_table', ipc);
 
 ## Browser Usage
 
-For browser environments, use [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) instead, which has a smaller WASM size (~6.3 MiB) and runs queries in a Web Worker.
+For browser environments, use [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) instead, which has a smaller WASM size (~7.2 MiB gzipped) and runs queries in a Web Worker.
 
 ## Limitations
 

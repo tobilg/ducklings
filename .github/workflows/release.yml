@@ -112,13 +112,14 @@ jobs:
       - name: Build browser WASM
         run: make duckdb-browser
 
-      - name: Report browser WASM size
+      - name: Check browser WASM size
         run: |
           SIZE=$(stat -c%s dist/duckdb.wasm)
           LIMIT=${{ env.CF_PAGES_MAX_FILE_BYTES }}
           echo "dist/duckdb.wasm: ${SIZE} bytes"
           if [ "$SIZE" -gt "$LIMIT" ]; then
-            echo "::warning::dist/duckdb.wasm is ${SIZE} bytes, exceeds Cloudflare Pages limit ${LIMIT}. Package publishing continues; the Pages deploy job enforces the limit on the final built asset."
+            echo "::error::dist/duckdb.wasm is ${SIZE} bytes, exceeds Cloudflare Pages limit ${LIMIT}"
+            exit 1
           fi
 
       - name: Upload browser WASM artifacts
@@ -608,6 +609,71 @@ jobs:
           name: duckdb-workers-spatial-dist
           path: dist
 
+      - name: Compose release notes
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # Per-version notes (highlights, breaking changes) live in docs/releases/v<version>.md
+          NOTES_FILE="docs/releases/v${VERSION%%-*}.md"
+          {
+            echo "## Ducklings v${VERSION}"
+            echo
+            if [ -f "${NOTES_FILE}" ]; then
+              cat "${NOTES_FILE}"
+              echo
+            fi
+            cat <<'EOF' | sed "s/__VERSION__/${VERSION}/g"
+          ### Packages
+          - [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) - Browser version
+          - [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) - Default Cloudflare Workers package with httpfs and Parquet
+          - [`@ducklings/workers-iceberg`](https://www.npmjs.com/package/@ducklings/workers-iceberg) - Cloudflare Workers version with Iceberg
+          - [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake) - Cloudflare Workers version with DuckLake
+          - [`@ducklings/workers-spatial`](https://www.npmjs.com/package/@ducklings/workers-spatial) - Cloudflare Workers version with Spatial
+
+          ### Installation
+          ```bash
+          # Browser
+          npm install @ducklings/browser@__VERSION__
+
+          # Cloudflare Workers
+          npm install @ducklings/workers@__VERSION__
+
+          # Explicit Iceberg package
+          npm install @ducklings/workers-iceberg@__VERSION__
+
+          # Cloudflare Workers with DuckLake
+          npm install @ducklings/workers-ducklake@__VERSION__
+
+          # Cloudflare Workers with Spatial
+          npm install @ducklings/workers-spatial@__VERSION__
+          ```
+
+          ### Usage
+
+          **Browser:**
+          ```typescript
+          import { init, DuckDB } from '@ducklings/browser';
+
+          await init();
+          const db = new DuckDB();
+          const conn = await db.connect();
+          const result = await conn.query('SELECT 42 as answer');
+          ```
+
+          **Cloudflare Workers:**
+          ```typescript
+          import { init, DuckDB } from '@ducklings/workers';
+          import wasmModule from '@ducklings/workers/wasm';
+
+          await init({ wasmModule });
+          const db = new DuckDB();
+          const conn = db.connect();
+          const result = await conn.query('SELECT 42 as answer');
+          ```
+          EOF
+          } > dist/release-notes.md
+          cat dist/release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -618,56 +684,7 @@ jobs:
             dist/duckdb-workers-ducklake.wasm
             dist/duckdb-workers-spatial.wasm
           prerelease: ${{ needs.version.outputs.npm_tag == 'dev' }}
-          body: |
-            ## Ducklings v${{ needs.version.outputs.version }}
-
-            ### Packages
-            - [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) - Browser version
-            - [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) - Default Cloudflare Workers package with httpfs and Parquet
-            - [`@ducklings/workers-iceberg`](https://www.npmjs.com/package/@ducklings/workers-iceberg) - Cloudflare Workers version with Iceberg
-            - [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake) - Cloudflare Workers version with DuckLake
-            - [`@ducklings/workers-spatial`](https://www.npmjs.com/package/@ducklings/workers-spatial) - Cloudflare Workers version with Spatial
-
-            ### Installation
-            ```bash
-            # Browser
-            npm install @ducklings/browser@${{ needs.version.outputs.version }}
-
-            # Cloudflare Workers
-            npm install @ducklings/workers@${{ needs.version.outputs.version }}
-
-            # Explicit Iceberg package
-            npm install @ducklings/workers-iceberg@${{ needs.version.outputs.version }}
-
-            # Cloudflare Workers with DuckLake
-            npm install @ducklings/workers-ducklake@${{ needs.version.outputs.version }}
-
-            # Cloudflare Workers with Spatial
-            npm install @ducklings/workers-spatial@${{ needs.version.outputs.version }}
-            ```
-
-            ### Usage
-
-            **Browser:**
-            ```typescript
-            import { init, DuckDB } from '@ducklings/browser';
-
-            await init();
-            const db = new DuckDB();
-            const conn = db.connect();
-            const result = conn.query('SELECT 42 as answer');
-            ```
-
-            **Cloudflare Workers:**
-            ```typescript
-            import { init, DuckDB } from '@ducklings/workers';
-            import wasmModule from '@ducklings/workers/wasm';
-
-            await init({ wasmModule });
-            const db = new DuckDB();
-            const conn = db.connect();
-            const result = await conn.query('SELECT 42 as answer');
-            ```
+          body_path: dist/release-notes.md
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

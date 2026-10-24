@@ -1,11 +1,12 @@
 #pragma once
 
-#include "httpfs_client.hpp"
+#include "duckdb/main/http/http_util.hpp"
 
 namespace duckdb {
 
-// Keep httpfs settings and scoped secret lookup; replace only the transport.
-class HTTPWasmUtil : public HTTPFSUtil {
+// Browser-style transport provider. httpfs wraps it in its own util, which keeps httpfs settings,
+// secrets and retries; this class only replaces the transport.
+class HTTPWasmUtil : public HTTPUtil {
 public:
     unique_ptr<HTTPClient> InitializeClient(HTTPParams &http_params, const string &proto_host_port) override;
 

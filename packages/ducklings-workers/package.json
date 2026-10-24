@@ -1,6 +1,6 @@
 {
   "name": "@ducklings/workers",
-  "version": "1.5.6",
+  "version": "2.0.0",
   "description": "DuckDB WASM for Cloudflare Workers with httpfs and Parquet",
   "type": "module",
   "main": "./dist/index.cjs",

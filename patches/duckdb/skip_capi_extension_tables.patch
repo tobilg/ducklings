@@ -1,0 +1,45 @@
+diff --git a/src/main/database.cpp b/src/main/database.cpp
+--- a/src/main/database.cpp
++++ b/src/main/database.cpp
+@@ -295,10 +295,6 @@
+ 	if (!config.options.unrecognized_options.empty()) {
+ 		ThrowExtensionSetUnrecognizedOptions(config.options.unrecognized_options);
+ 	}
+-}
+-
+-static duckdb_ext_api_v1 CreateAPIv1Wrapper() {
+-	return CreateAPIv1();
+ }
+ 
+ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_config) {
+@@ -347,8 +343,7 @@
+ 		}
+ 	}
+ 
+-	create_api_v1 = CreateAPIv1Wrapper;
+-	invoke_capi_v2 = InvokeCAPIV2Entrypoint;
++	// Ducklings links only C++ extensions and cannot load others, so the C API function tables stay unreferenced.
+ 
+ 	db_file_system = make_uniq<DatabaseFileSystem>(*this);
+ 	local_db_file_system = make_uniq<LocalDatabaseFileSystem>(*this);
+@@ -708,14 +703,18 @@
+ }
+ 
+ const duckdb_ext_api_v1 DatabaseInstance::GetExtensionAPIV1() {
+-	D_ASSERT(create_api_v1);
++	if (!create_api_v1) {
++		throw NotImplementedException("C API extensions are not supported in this build");
++	}
+ 	return create_api_v1();
+ }
+ 
+ void DatabaseInstance::InvokeExtensionEntrypointV2(const ExtensionInitResult &init_result, const string &extension_name,
+                                                    ext_init_c_api_v2_fun_t init_fun,
+                                                    optional_ptr<ClientContext> context, bool statically_linked) {
+-	D_ASSERT(invoke_capi_v2);
++	if (!invoke_capi_v2) {
++		throw NotImplementedException("C API extensions are not supported in this build");
++	}
+ 	invoke_capi_v2(*this, init_result, extension_name, init_fun, context, statically_linked);
+ }
+ 

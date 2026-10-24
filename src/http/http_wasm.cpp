@@ -1,5 +1,7 @@
 #include "http_wasm.hpp"
 
+#include "duckdb/common/string_util.hpp"
+
 #include <emscripten.h>
 #include <cstring>
 
@@ -219,7 +221,7 @@ static char* em_sync_request(const char* url, const char* method, int header_cou
 
 class HTTPWasmClient : public HTTPClient {
 public:
-    HTTPWasmClient(HTTPFSParams &http_params, const string &proto_host_port) {
+    explicit HTTPWasmClient(const string &proto_host_port) : HTTPClient(proto_host_port) {
         host_port = proto_host_port;
         // Check once at construction if we have XHR available
         use_sync_xhr = (em_has_xhr() == 1);
@@ -231,15 +233,35 @@ public:
     bool use_sync_xhr;
 
     unique_ptr<HTTPResponse> Get(GetRequestInfo &info) override {
-        return DoRequest("GET", info.url, RequestHeaders(info), nullptr, 0, info.content_handler);
+        auto res = DoRequest("GET", info.url, BaseRequest::MergeHeaders(info.headers, info.params), nullptr, 0);
+        info.bytes_received = res->body.size();
+        // Same contract as httpfs's native client: error bodies stay on the response, a rejecting
+        // response_handler stops the transfer, and content_handler receives the body instead of the response.
+        if (res->status == HTTPStatusCode::INVALID || static_cast<int>(res->status) >= 400) {
+            if (info.response_handler && res->status != HTTPStatusCode::INVALID) {
+                info.response_handler(*res);
+            }
+            return res;
+        }
+        if (info.response_handler && !info.response_handler(*res)) {
+            res->body.clear();
+            return res;
+        }
+        if (info.content_handler) {
+            string body = std::move(res->body);
+            res->body.clear();
+            info.content_handler(const_data_ptr_cast(body.data()), body.size());
+        }
+        return res;
     }
 
     unique_ptr<HTTPResponse> Head(HeadRequestInfo &info) override {
-        return DoHeadRequest(info.url, RequestHeaders(info));
+        return DoHeadRequest(info.url, BaseRequest::MergeHeaders(info.headers, info.params));
     }
 
     unique_ptr<HTTPResponse> Post(PostRequestInfo &info) override {
-        auto result = DoRequest("POST", info.url, RequestHeaders(info), info.buffer_in, info.buffer_in_len, nullptr);
+        auto result = DoRequest("POST", info.url, BaseRequest::MergeHeaders(info.headers, info.params),
+                                info.buffer_in, info.buffer_in_len);
         if (result && result->status == HTTPStatusCode::OK_200) {
             info.buffer_out += result->body;
         }
@@ -247,23 +269,23 @@ public:
     }
 
     unique_ptr<HTTPResponse> Put(PutRequestInfo &info) override {
-        return DoRequest("PUT", info.url, RequestHeaders(info), info.buffer_in, info.buffer_in_len, nullptr);
+        auto headers = BaseRequest::MergeHeaders(info.headers, info.params);
+        // S3 signs the content type, so it has to be sent even when the caller passed it separately.
+        if (!info.content_type.empty() && !headers.HasHeader("Content-Type")) {
+            headers.Insert("Content-Type", info.content_type);
+        }
+        return DoRequest("PUT", info.url, headers, info.buffer_in, info.buffer_in_len);
     }
 
     unique_ptr<HTTPResponse> Delete(DeleteRequestInfo &info) override {
-        return DoRequest("DELETE", info.url, RequestHeaders(info), nullptr, 0, nullptr);
+        return DoRequest("DELETE", info.url, BaseRequest::MergeHeaders(info.headers, info.params), nullptr, 0);
+    }
+
+    unique_ptr<HTTPResponse> Options(OptionsRequestInfo &info) override {
+        return DoRequest("OPTIONS", info.url, BaseRequest::MergeHeaders(info.headers, info.params), nullptr, 0);
     }
 
 private:
-    static HTTPHeaders RequestHeaders(BaseRequest &info) {
-        // httpfs sometimes merges scoped secret headers before signing a request.
-        // Otherwise the transport must add them, like the native httpfs clients.
-        if (info.params.Cast<HTTPFSParams>().pre_merged_headers) {
-            return info.headers;
-        }
-        return BaseRequest::MergeHeaders(info.headers, info.params);
-    }
-
     string NormalizeUrl(const string &url) {
         string path = url;
         if (path[0] == '/') {
@@ -306,8 +328,7 @@ private:
 
     unique_ptr<HTTPResponse> DoRequest(const char *method, const string &url,
                                         const HTTPHeaders &headers,
-                                        const_data_ptr_t body_data, idx_t body_len,
-                                        std::function<void(const_data_ptr_t, idx_t)> content_handler) {
+                                        const_data_ptr_t body_data, idx_t body_len) {
         unique_ptr<HTTPResponse> res;
         string path = NormalizeUrl(url);
 
@@ -354,10 +375,6 @@ private:
                     ParseResponseHeaders(string(header_ptr, header_len), res->headers);
                 }
                 res->body = string(body_ptr, body_len);
-
-                if (content_handler && status_code >= 200 && status_code < 300) {
-                    content_handler((const_data_ptr_t)(body_ptr), body_len);
-                }
             }
 
             free(result);
@@ -415,12 +432,11 @@ private:
 };
 
 unique_ptr<HTTPClient> HTTPWasmUtil::InitializeClient(HTTPParams &http_params, const string &proto_host_port) {
-    auto client = make_uniq<HTTPWasmClient>(http_params.Cast<HTTPFSParams>(), proto_host_port);
-    return std::move(client);
+    return make_uniq<HTTPWasmClient>(proto_host_port);
 }
 
 string HTTPWasmUtil::GetName() const {
-    return "WasmHTTPUtils";  // Must match what httpfs_extension.cpp checks for
+    return "WasmHTTPUtils";  // httpfs wraps a provider with this name in its HTTPFS-Wasm util
 }
 
 // Factory function to create the WASM HTTP utility

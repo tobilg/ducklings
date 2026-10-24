@@ -16,7 +16,8 @@ WORKERS_FLAVOR="base"
 
 case "${TARGET}" in
     browser)
-        WORKERS_FLAVOR="iceberg"
+        # Same extensions as the base Workers build; Avro and Iceberg would push it past the 25 MiB static-asset limit.
+        WORKERS_FLAVOR="base"
         ;;
     workers)
         TARGET="workers"
@@ -266,6 +267,12 @@ if [ "$TARGET" = "workers" ]; then
     ASYNCIFY_ADD+="'duckdb::HTTPWasmUtil*',"
     ASYNCIFY_ADD+="'duckdb::CreateWasmHTTPUtil*',"
     ASYNCIFY_ADD+="'*HTTPUtil::SendRequest*\$_0*',"
+    # DuckDB 2.0 transport manager and the reorganized httpfs/S3 request path
+    ASYNCIFY_ADD+="'duckdb::HTTPTransportManager*',"
+    ASYNCIFY_ADD+="'duckdb::HTTPRequestSession*',"
+    ASYNCIFY_ADD+="'duckdb::HTTPFSUtil*',"
+    ASYNCIFY_ADD+="'*HTTPFSWasmUtil*',"
+    ASYNCIFY_ADD+="'duckdb::S3*',"
     ASYNCIFY_ADD+="'*HTTPUtil::SendRequest*\$_1*',"
     # Existing remote readers
     ASYNCIFY_ADD+="'duckdb::Parquet*',"
@@ -401,6 +408,35 @@ if [ "$TARGET" = "workers" ]; then
         # GEOS, SGL, and PROJ with networking disabled cannot suspend for HTTP.
         # Keep DuckDB's file readers instrumented: their VFS can yield.
         ASYNCIFY_REMOVE+=",'*geos::*','GEOS*','*sgl::*','*osgeo::proj::*','proj_*','pj_*','geod_*'"
+        # Pure computation that cannot sit above an HTTP fetch, trimmed to keep the Spatial Worker under 64 MiB.
+        # Verified against a named-function link: none of these match file system, HTTP, multi-file,
+        # table-function init or deserialization paths. ST_ReadSHP stays instrumented.
+        # PROJ's SQLite database lives in its in-memory VFS.
+        ASYNCIFY_REMOVE+=",'sqlite3*'"
+        # Scalar kernels run under ExpressionExecutor, which is already removed above.
+        ASYNCIFY_REMOVE+=",'*ScalarFunction::*','*ScalarExecutor*','*BinaryScalarFunctionZeroCheck*','*BinaryScalarAdapter*'"
+        ASYNCIFY_REMOVE+=",'*UnaryScalarAdapter*','*SymmetricPreparedBinaryFunction*','*AsymmetricPreparedBinaryFunction*'"
+        ASYNCIFY_REMOVE+=",'*DecimalDivExecute*','*GenericRoundPrecisionDecimal*','*StructSearch*','*ListSearch*'"
+        # Scalar function kernels, matched by signature; table functions such as ST_ReadSHP never take an
+        # ExpressionState&. Emscripten splits lists on commas and rejects unbalanced parentheses, hence the wildcards.
+        ASYNCIFY_REMOVE+=",'*::Execute*duckdb::DataChunk&*duckdb::ExpressionState&*duckdb::Vector&*'"
+        ASYNCIFY_REMOVE+=",'*ST_*::ExecuteGeometry*','*ST_*::ExecutePolygon*','*ST_*::ExecuteLineString*','*ST_*::ExecuteBox*'"
+        ASYNCIFY_REMOVE+=",'*ST_*::ExecutePoint*','*ST_*::ExecuteWithStyle*','*ST_*::ExecuteFromRings*'"
+        # Casts, date arithmetic, join and aggregate internals
+        ASYNCIFY_REMOVE+=",'*VectorCastHelpers*','*DecimalDecimalCastSwitch*','*FromDecimalCast*'"
+        ASYNCIFY_REMOVE+=",'*DatePart*::UnaryFunction*','*DateDiff*::BinaryExecute*','*DateSub*::BinaryExecute*'"
+        ASYNCIFY_REMOVE+=",'*TemplatedMatch*','*MarkJoinSwitch*','*AggregateExecutor*'"
+        # Registration runs only while a database opens; no C API v2 extension is linked, so v2 is never called.
+        ASYNCIFY_REMOVE+=",'*Register*Functions*','spatial_duckdb_cpp_init*','*capiv2::*','duckdb_v2_*'"
+        # Text rendering and exception construction
+        ASYNCIFY_REMOVE+=",'*SQLFormatter*','*KeywordHelper*','*Exception::*Exception*','*BoundExpressionSQLExportState*'"
+        ASYNCIFY_REMOVE+=",'*duckdb_fmt::*','*duckdb::StringUtil::*'"
+        # Appenders only write local tables in this flavor (no Iceberg/DuckLake write path).
+        ASYNCIFY_REMOVE+=",'*BaseAppender*'"
+        # Push-based execution: the join is never on the stack while its source scan fetches.
+        ASYNCIFY_REMOVE+=",'*PhysicalSpatialJoin*','*ST_AsMVT*'"
+        # PROJ's JSON parser and deformation models work on in-memory data
+        ASYNCIFY_REMOVE+=",'*nlohmann::*','*DeformationModel::*'"
     fi
     ASYNCIFY_REMOVE+="]"
     case "${ASYNCIFY_STRATEGY}" in
@@ -467,6 +503,27 @@ if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
     BUILD_DIR="${PROJECT_ROOT}/build/emscripten-spatial"
     OUTPUT_SUFFIX="-workers-spatial"
 fi
+
+# The browser uses native Wasm exceptions, which shrink the code section, and drops RTTI type names (exception types
+# keep theirs) to stay under the 25 MiB static-asset limit. Workers keep Emscripten's JS exceptions because Asyncify
+# cannot instrument native ones. Objects differ per mode, so the browser compiles into its own directory.
+# Hand-compiled sources need the same flags as core: otherwise their catch blocks are compiled out, or classes deriving
+# from DuckDB types reference typeinfo that core never emits.
+if [ "$TARGET" = "browser" ]; then
+    BUILD_DIR="${PROJECT_ROOT}/build/emscripten-browser"
+    CORE_CODEGEN_FLAGS="-fwasm-exceptions -fno-rtti"
+    EXTENSION_CODEGEN_FLAGS="-fwasm-exceptions -fno-rtti"
+else
+    CORE_CODEGEN_FLAGS="-sDISABLE_EXCEPTION_CATCHING=0"
+    EXTENSION_CODEGEN_FLAGS="-sDISABLE_EXCEPTION_CATCHING=0"
+    # Spatial has its own build directory and no RTTI users. Iceberg, Quack, and DuckLake call dynamic_cast, so the
+    # shared build/emscripten core keeps RTTI.
+    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
+        CORE_CODEGEN_FLAGS+=" -fno-rtti"
+        EXTENSION_CODEGEN_FLAGS+=" -fno-rtti"
+    fi
+fi
+export EXTENSION_CODEGEN_FLAGS
 
 # Number of parallel jobs
 CORES=${DUCKLINGS_BUILD_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}
@@ -541,9 +598,13 @@ compile_source_if_needed() {
 
     mkdir -p "$(dirname "${obj}")"
 
-    if depfile_needs_rebuild "${dep}" "${obj}"; then
+    # Timestamps miss flag changes (e.g. objects restored from the CI cache), so the flags are recorded per object.
+    local flags="${EXTENSION_CODEGEN_FLAGS} $*"
+    local flags_file="${obj%.o}.flags"
+    if depfile_needs_rebuild "${dep}" "${obj}" || [ "$(cat "${flags_file}" 2>/dev/null)" != "${flags}" ]; then
         log_info "  Compiling ${label}..."
-        emcc "$@" -MMD -MF "${dep}" -c "${src}" -o "${obj}"
+        emcc ${EXTENSION_CODEGEN_FLAGS} "$@" -MMD -MF "${dep}" -c "${src}" -o "${obj}"
+        printf '%s' "${flags}" > "${flags_file}"
     fi
 }
 
@@ -553,6 +614,8 @@ archive_if_needed() {
 
     if archive_needs_rebuild "${archive}" "$@"; then
         log_info "  Archiving $(basename "${archive}")..."
+        # Recreate instead of appending, so objects of removed sources do not linger.
+        rm -f "${archive}"
         emar rcs "${archive}" "$@"
     fi
 }
@@ -573,6 +636,7 @@ compile_iceberg_source_if_needed() {
         -std=c++17 \
         -DNDEBUG \
         -DDUCKDB_NO_THREADS=1 \
+        -DDUCKDB_SMALLER_BINARY_ALL \
         -I"${ICEBERG_SRC}/src/include" \
         -I"${AVRO_SRC}/src/include" \
         -I"${DUCKDB_SRC}/src/include" \
@@ -601,12 +665,14 @@ compile_ducklake_source_if_needed() {
         -std=c++17 \
         -DNDEBUG \
         -DDUCKDB_NO_THREADS=1 \
+        -DDUCKDB_SMALLER_BINARY_ALL \
         -I"${DUCKLAKE_SRC}/src/include" \
         -I"${DUCKDB_SRC}/src/include" \
         -I"${BUILD_DIR}/src/include" \
         -I"${DUCKDB_SRC}/third_party/yyjson/include" \
         -I"${DUCKDB_SRC}/third_party/fmt/include" \
         -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
+        -I"${DUCKDB_SRC}/third_party/miniz" \
         -I"${DUCKDB_SRC}/third_party/re2" \
         -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
         -I"${DUCKDB_SRC}/extension/parquet/include" \
@@ -631,6 +697,7 @@ compile_quack_source_if_needed() {
         -std=c++17 \
         -DNDEBUG \
         -DDUCKDB_NO_THREADS=1 \
+        -DDUCKDB_SMALLER_BINARY_ALL \
         -DQUACK_CLIENT_ONLY_WASM=1 \
         -I"${QUACK_SRC}/src/include" \
         -I"${DUCKDB_SRC}/src/include" \
@@ -775,14 +842,14 @@ setup_build_dir() {
 prepare_duckdb_extension_config_override() {
     local override_file="${BUILD_DIR}/duckdb_extension_config.override.cmake"
 
-    if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
-        rm -f "${override_file}"
-        return
+    # DuckDB's base config also links icu and json; the bundled builds keep only parquet and core_functions.
+    echo 'duckdb_extension_load(icu DONT_BUILD)' > "${override_file}"
+    if [ "${JSON_EXTENSION_ENABLED}" != "1" ]; then
+        echo 'duckdb_extension_load(json DONT_BUILD)' >> "${override_file}"
     fi
-
-    cat > "${override_file}" << 'CMAKEEOF'
-duckdb_extension_load(json DONT_BUILD)
-CMAKEEOF
+    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
+        echo "duckdb_extension_load(spatial SOURCE_DIR \"${SPATIAL_SRC}\" INCLUDE_DIR \"${SPATIAL_SRC}/src/spatial\")" >> "${override_file}"
+    fi
 
     echo "${override_file}"
 }
@@ -799,23 +866,18 @@ configure_duckdb() {
     # JSON is disabled for the bundled build, inject an override config so the
     # repo-local extension_config_local.cmake cannot pull json back in.
     local BUILD_EXTS=""
-    local SKIP_EXTS="jemalloc"
+    local SKIP_EXTS="jemalloc;icu"
     local EXTENSION_CONFIG_OVERRIDE=""
 
     if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
         BUILD_EXTS="json"
     else
         SKIP_EXTS="${SKIP_EXTS};json"
-        EXTENSION_CONFIG_OVERRIDE="$(prepare_duckdb_extension_config_override)"
     fi
+    EXTENSION_CONFIG_OVERRIDE="$(prepare_duckdb_extension_config_override)"
 
     local -a SPATIAL_CMAKE_FLAGS=()
     if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
-        EXTENSION_CONFIG_OVERRIDE="${BUILD_DIR}/spatial_extension_config.cmake"
-        cat > "${EXTENSION_CONFIG_OVERRIDE}" << CMAKEEOF
-duckdb_extension_load(json DONT_BUILD)
-duckdb_extension_load(spatial SOURCE_DIR "${SPATIAL_SRC}" INCLUDE_DIR "${SPATIAL_SRC}/src/spatial")
-CMAKEEOF
         SPATIAL_CMAKE_FLAGS=(
             "-DCMAKE_TOOLCHAIN_FILE=${PROJECT_ROOT}/build/vcpkg/scripts/buildsystems/vcpkg.cmake"
             "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${EMSCRIPTEN_ROOT}/cmake/Modules/Platform/Emscripten.cmake"
@@ -828,8 +890,17 @@ CMAKEEOF
         )
     fi
 
+    # DuckDB 2.0 no longer derives its version from git describe; report the tag the submodule is pinned to.
+    local -a VERSION_CMAKE_FLAGS=()
+    local duckdb_tag=""
+    if duckdb_tag="$(git -C "$DUCKDB_SRC" describe --tags --exact-match 2>/dev/null)"; then
+        VERSION_CMAKE_FLAGS=("-DDUCKDB_EXPLICIT_VERSION=${duckdb_tag}")
+        log_info "  DuckDB version: ${duckdb_tag}"
+    fi
+
     emcmake cmake "$DUCKDB_SRC" \
         ${SPATIAL_CMAKE_FLAGS[@]+"${SPATIAL_CMAKE_FLAGS[@]}"} \
+        ${VERSION_CMAKE_FLAGS[@]+"${VERSION_CMAKE_FLAGS[@]}"} \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHELL=OFF \
         -DBUILD_UNITTESTS=OFF \
@@ -840,7 +911,10 @@ CMAKEEOF
         -DSKIP_EXTENSIONS="${SKIP_EXTS}" \
         -DDUCKDB_EXPLICIT_PLATFORM=wasm_mvp \
         -DSMALLER_BINARY=TRUE \
-        -DCMAKE_CXX_FLAGS="-Oz -DNDEBUG -DDUCKDB_NO_THREADS=1 -DDUCKDB_DISABLE_EXTENSION_LOAD=1 -sDISABLE_EXCEPTION_CATCHING=0" \
+        -DENABLE_EXTENSION_LOAD=OFF \
+        -DENABLE_BUILTIN_HTTPLIB=OFF \
+        -DDUCKDB_CAPABILITIES=none \
+        -DCMAKE_CXX_FLAGS="-Oz -DNDEBUG -DDUCKDB_NO_THREADS=1 ${CORE_CODEGEN_FLAGS}" \
         -DCMAKE_C_FLAGS="-Oz -DNDEBUG"
 }
 
@@ -883,43 +957,57 @@ build_httpfs() {
     mkdir -p "${BUILD_DIR}/httpfs"
     cd "${BUILD_DIR}/httpfs"
 
-    # Compile httpfs source files for the WASM HTTP client.
+    # Mirrors httpfs's src/CMakeLists.txt for EMSCRIPTEN: no crypto.cpp, wasm client instead of httplib/curl.
     local -a HTTPFS_SOURCES=(
         "hffs.cpp"
-        "s3fs.cpp"
-        "s3_multi_part_upload.cpp"
-        "httpfs.cpp"
-        "http_state.cpp"
-        "httpfs_extension.cpp"
         "create_secret_functions.cpp"
-        "hash_functions.cpp"
-        "httpfs_client_wasm.cpp"
+        "httpfs_extension.cpp"
+        "http/httpfs.cpp"
+        "http/httpfs_transport.cpp"
+        "http/httpfs_certificates.cpp"
+        "http/http_request.cpp"
+        "http/http_settings.cpp"
+        "http/http_request_session.cpp"
+        "http/http_state.cpp"
+        "http/httpfs_client_wasm.cpp"
+        "s3/s3_auth.cpp"
+        "s3/s3_delete.cpp"
+        "s3/s3_endpoint.cpp"
+        "s3/s3_list.cpp"
+        "s3/s3_provider.cpp"
+        "s3/s3_request.cpp"
+        "s3/s3_settings.cpp"
+        "s3/s3_upload_session.cpp"
+        "s3/s3_url.cpp"
+        "s3/s3_xml_response.cpp"
+        "s3/s3fs.cpp"
     )
 
     local -a HTTPFS_OBJS=()
     local src=""
-    local obj=""
-    local dep=""
+    local obj_base=""
     for src in "${HTTPFS_SOURCES[@]}"; do
-        obj="${src%.cpp}.o"
-        dep="${src%.cpp}.d"
+        obj_base="${src//\//_}"
+        obj_base="${obj_base%.cpp}"
         compile_source_if_needed "${src}" \
             "${HTTPFS_SRC}/src/${src}" \
-            "${BUILD_DIR}/httpfs/${obj}" \
-            "${BUILD_DIR}/httpfs/${dep}" \
+            "${BUILD_DIR}/httpfs/${obj_base}.o" \
+            "${BUILD_DIR}/httpfs/${obj_base}.d" \
             -Oz \
             -std=c++17 \
             -DNDEBUG \
             -DDUCKDB_NO_THREADS=1 \
+            -DDUCKDB_SMALLER_BINARY_ALL \
             -I"${DUCKDB_SRC}/src/include" \
             -I"${HTTPFS_SRC}/src/include" \
             -I"${BUILD_DIR}/src/include" \
             -I"${DUCKDB_SRC}/third_party/fmt/include" \
             -I"${DUCKDB_SRC}/third_party/utf8proc/include" \
             -I"${DUCKDB_SRC}/third_party/mbedtls/include" \
+            -I"${DUCKDB_SRC}/third_party/httplib" \
             -I"${DUCKDB_SRC}/third_party/re2" \
             -I"${VCPKG_INSTALLED}/include"
-        HTTPFS_OBJS+=("${BUILD_DIR}/httpfs/${obj}")
+        HTTPFS_OBJS+=("${BUILD_DIR}/httpfs/${obj_base}.o")
     done
 
     # Create static library
@@ -943,6 +1031,7 @@ build_http_wasm_client() {
         -std=c++17 \
         -DNDEBUG \
         -DDUCKDB_NO_THREADS=1 \
+        -DDUCKDB_SMALLER_BINARY_ALL \
         -I"${DUCKDB_SRC}/src/include" \
         -I"${BUILD_DIR}/src/include" \
         -I"${DUCKDB_SRC}/third_party/fmt/include" \
@@ -1113,6 +1202,7 @@ build_avro() {
         "avro_reader.cpp"
         "avro_copy.cpp"
         "avro_multi_file_info.cpp"
+        "avro_metadata.cpp"
         "field_ids.cpp"
     )
 
@@ -1131,6 +1221,7 @@ build_avro() {
             -std=c++17 \
             -DNDEBUG \
             -DDUCKDB_NO_THREADS=1 \
+            -DDUCKDB_SMALLER_BINARY_ALL \
             -I"${AVRO_SRC}/src/include" \
             -I"${DUCKDB_SRC}/src/include" \
             -I"${BUILD_DIR}/src/include" \
@@ -1260,13 +1351,24 @@ build_quack_client() {
     mkdir -p "${BUILD_DIR}/quack"
     cd "${BUILD_DIR}/quack"
 
+    # Client side only: the server, its result cache, scan-from-client, start/stop,
+    # active connections and SSL key generation are excluded (see client_only_wasm.patch).
     local -a QUACK_SOURCES=(
+        "${QUACK_SRC}/src/quack_cancel.cpp"
         "${QUACK_SRC}/src/quack_clear_cache.cpp"
         "${QUACK_SRC}/src/quack_client.cpp"
         "${QUACK_SRC}/src/quack_extension.cpp"
+        "${QUACK_SRC}/src/quack_fetch_ahead.cpp"
+        "${QUACK_SRC}/src/quack_fetch_collector.cpp"
         "${QUACK_SRC}/src/quack_log.cpp"
         "${QUACK_SRC}/src/quack_message.cpp"
+        "${QUACK_SRC}/src/quack_random.cpp"
+        "${QUACK_SRC}/src/quack_rebalancer_core.cpp"
+        "${QUACK_SRC}/src/quack_rebalancer_sink.cpp"
         "${QUACK_SRC}/src/quack_scan.cpp"
+        "${QUACK_SRC}/src/quack_secret.cpp"
+        "${QUACK_SRC}/src/quack_send_data.cpp"
+        "${QUACK_SRC}/src/quack_settings.cpp"
         "${QUACK_SRC}/src/quack_storage.cpp"
         "${QUACK_SRC}/src/quack_uri.cpp"
         "${QUACK_SRC}/src/serialize_quack_message.cpp"
@@ -1316,33 +1418,22 @@ build_quack_client() {
     log_info "quack client extension built!"
 }
 
-prepare_generated_extension_loader() {
-    local generated_loader="${BUILD_DIR}/codegen/src/generated_extension_loader.cpp"
-
-    if [ ! -f "${generated_loader}" ]; then
-        log_error "Generated extension loader not found: ${generated_loader}"
-        exit 1
-    fi
+prepare_static_extension_loader() {
+    # In-tree extensions registered here are loaded by DuckDB itself when a database opens.
+    # httpfs and the lakehouse extensions are loaded by duckdb_wasm_httpfs_init instead, after the WASM HTTP util is set.
+    local loader="${BUILD_DIR}/codegen/link/ducklings_static_extension_loader.cpp"
+    local -a extensions=("parquet" "core_functions")
 
     if [ "${JSON_EXTENSION_ENABLED}" = "1" ]; then
-        echo "${generated_loader}"
-        return
+        extensions+=("json")
+    fi
+    if [ "${EXTENSION_FLAVOR}" = "spatial" ]; then
+        extensions+=("spatial")
     fi
 
-    local filtered_loader="${BUILD_DIR}/codegen/src/generated_extension_loader.no_json.cpp"
-    log_info "Preparing generated extension loader without json..." >&2
-
-    perl -0pe '
-        s/^\s*if \(extension=="json"\) \{\n\s*db\.LoadStaticExtension<JsonExtension>\(\);\n\s*return ExtensionLoadResult::LOADED_EXTENSION;\n\s*\}\n//m;
-        s/^\s*"json",\n//m;
-    ' "${generated_loader}" > "${filtered_loader}"
-
-    if cmp -s "${generated_loader}" "${filtered_loader}" && grep -q 'extension=="json"' "${generated_loader}"; then
-        log_error "Failed to strip json from generated extension loader" >&2
-        exit 1
-    fi
-
-    echo "${filtered_loader}"
+    mkdir -p "$(dirname "${loader}")"
+    python3 "${DUCKDB_SRC}/scripts/generate_static_extension_loader.py" -o "${loader}" "${extensions[@]}" >&2
+    echo "${loader}"
 }
 
 find_duckdb_libraries() {
@@ -1475,8 +1566,8 @@ link_wasm_module() {
     log_info "Linking WASM module..."
 
     local DUCKDB_LIBS=$(find_duckdb_libraries)
-    local GENERATED_EXTENSION_LOADER
-    GENERATED_EXTENSION_LOADER="$(prepare_generated_extension_loader)"
+    local STATIC_EXTENSION_LOADER
+    STATIC_EXTENSION_LOADER="$(prepare_static_extension_loader)"
     log_info "Using libraries: $DUCKDB_LIBS"
 
     local EXTENSION_INCLUDES=""
@@ -1527,7 +1618,7 @@ bool preloaded_quack = false;'
 #include "duckdb/common/virtual_file_system.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/main/extension_helper.hpp"
-#include "httpfs.hpp"
+#include "http/httpfs.hpp"
 #include "httpfs_extension.hpp"
 #include "http_wasm.hpp"
 ${EXTENSION_INCLUDES}
@@ -1536,7 +1627,7 @@ namespace duckdb {
 
 // Mark extensions as preloaded so DuckDB doesn't try to load them dynamically
 // All must be true before duckdb_open — DuckDB's startup may query ExtensionIsLoaded
-// and attempt LoadExternalExtension if it returns false (which throws with DUCKDB_DISABLE_EXTENSION_LOAD)
+// and attempt LoadExternalExtension if it returns false (which throws, since ENABLE_EXTENSION_LOAD=OFF)
 ${PRELOADED_FLAGS}
 
 } // namespace duckdb
@@ -1613,13 +1704,13 @@ char *duckdb_wasm_result_value_to_string(duckdb_result *result, idx_t col, idx_t
 
     try {
         auto *result_data = reinterpret_cast<duckdb::DuckDBResultData *>(result->internal_data);
+        // Streamed results have no retained collection to index into.
         if (!result_data || !result_data->result) return nullptr;
-        if (result_data->result->type != duckdb::QueryResultType::MATERIALIZED_RESULT) return nullptr;
 
-        auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data->result);
-        if (col >= materialized.ColumnCount() || row >= materialized.RowCount()) return nullptr;
+        auto &query_result = *result_data->result;
+        if (col >= query_result.ColumnCount() || row >= query_result.RowCount()) return nullptr;
 
-        auto value = materialized.GetValue(col, row);
+        auto value = query_result.Collection().GetValue(col, row);
         return duckdb_wasm_stringify_value(value);
     } catch (...) {
         return nullptr;
@@ -1764,6 +1855,7 @@ MAINEOF
         -std=c++17 \
         -DNDEBUG \
         -DDUCKDB_NO_THREADS=1 \
+        -DDUCKDB_SMALLER_BINARY_ALL \
         ${TARGET_DEFINES} \
         -I"${DUCKDB_SRC}/src/include" \
         -I"${BUILD_DIR}/src/include" \
@@ -1792,12 +1884,12 @@ MAINEOF
         -s FILESYSTEM=1 \
         -s FORCE_FILESYSTEM=1 \
         -s MALLOC=emmalloc \
-        -s ERROR_ON_UNDEFINED_SYMBOLS=$([ "${EXTENSION_FLAVOR}" = "spatial" ] && echo 1 || echo 0) \
+        -s ERROR_ON_UNDEFINED_SYMBOLS=1 \
         -s ALLOW_MEMORY_GROWTH=1 \
         $([ "${EXTENSION_FLAVOR}" = "spatial" ] && echo "-s MAXIMUM_MEMORY=96MB" || { [ "$TARGET" = "workers" ] && echo "-s MAXIMUM_MEMORY=128MB" || echo "-s MAXIMUM_MEMORY=4GB"; }) \
         -s STACK_SIZE=1048576 \
         -s NO_EXIT_RUNTIME=1 \
-        -s DISABLE_EXCEPTION_CATCHING=0 \
+        ${CORE_CODEGEN_FLAGS} \
         -s WASM_BIGINT=0 \
         ${ASYNCIFY_FLAGS} \
         ${DEBUG_WASM_FLAGS} \
@@ -1807,7 +1899,8 @@ MAINEOF
         -s EXPORTED_RUNTIME_METHODS="${RUNTIME_METHODS}" \
         -o "${DIST_DIR}/duckdb${OUTPUT_SUFFIX}.js" \
         "${BUILD_DIR}/main.cpp" \
-        "${GENERATED_EXTENSION_LOADER}" \
+        "${STATIC_EXTENSION_LOADER}" \
+        "${DUCKDB_SRC}/extension/loader/static_extension_autoregister.cpp" \
         ${DUCKDB_LIBS}
 
     # Patch for Cloudflare Workers compatibility
@@ -1865,6 +1958,9 @@ CFPATCH
             --strip-dwarf
             --strip-producers
         )
+        if [ "$TARGET" = "browser" ]; then
+            WASM_OPT_FLAGS+=(--enable-exception-handling)
+        fi
         wasm-opt "${WASM_OPT_FLAGS[@]}" --converge -o "${OPT_WASM_FILE}" "${WASM_FILE}"
         mv "${OPT_WASM_FILE}" "${WASM_FILE}"
 

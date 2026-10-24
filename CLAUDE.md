@@ -56,15 +56,13 @@ ducklings/
 │   └── arrow/                     # Arrow IPC insert via nanoarrow
 ├── vcpkg.json                     # vcpkg manifest (iceberg/avro C deps)
 ├── vcpkg_ports/                   # vcpkg overlay ports for WASM compat
+│   ├── avro-c/                    # Pins the duckdb-avro-c commit deps/duckdb-avro vendors
 │   ├── aws-c-io/                  # No-op I/O for WASM
 │   ├── liblzma/                   # LITTLE_ENDIAN fix for wasm32
 │   ├── snappy/                    # fPIC fix for wasm32
 │   └── zlib/                      # Build fixes
 ├── patches/                       # Source patches for dependencies, one directory per submodule
 │   ├── duckdb/
-│   ├── duckdb-avro/
-│   ├── duckdb-httpfs/
-│   ├── duckdb-iceberg/
 │   ├── duckdb-quack/
 │   └── duckdb-spatial/
 ├── packages/
@@ -83,7 +81,6 @@ ducklings/
 ├── scripts/
 │   ├── build-duckdb.sh            # Emscripten build script
 │   ├── check-worker-size.sh       # Wrangler dry-run upload size check
-│   ├── test-local-worker.sh       # Local workerd integration test
 │   └── test-build-dependencies.py # Tests build-script dependency setup without compiling DuckDB
 └── .github/workflows/
     ├── ci.yml                     # CI (build, test on PR/push)
@@ -96,7 +93,7 @@ ducklings/
 
 - Node.js 18+
 - pnpm 9+
-- Emscripten SDK 4.0.22
+- Emscripten SDK 4.0.22, activated with `source <emsdk>/emsdk_env.sh` and `$EMSDK/upstream/bin` first in `PATH`. Other `emcc` versions (e.g. Homebrew's) fail to build vcpkg's zlib
 - Binaryen (for wasm-opt)
 - git (for vcpkg clone during build)
 
@@ -186,8 +183,9 @@ The Workers packages also re-export Flechette's `tableFromArrays`, `tableFromIPC
 
 - `scripts/build-duckdb.sh` - Main build script
 - Uses Emscripten with -Oz optimization, LTO, wasm-opt
-- Extensions built-in: Parquet and httpfs in the base Workers build; Avro/Iceberg, DuckLake, or Spatial are added only in their respective Workers flavors
+- Extensions built-in: Parquet and httpfs in the browser and base Workers builds; Avro/Iceberg, DuckLake, or Spatial are added only in their respective Workers flavors. The browser omits Avro and Iceberg to stay under the 25 MiB static-asset limit
 - Workers build adds `-sASYNCIFY` for async fetch support
+- The browser build uses native Wasm exceptions (`-fwasm-exceptions`, about 18% smaller code) and `-fno-rtti` (exception types keep their typeinfo), and compiles into `build/emscripten-browser`. Workers builds keep Emscripten's JS exceptions (`-sDISABLE_EXCEPTION_CATCHING=0`) because Asyncify cannot instrument native ones. Base, Iceberg, and DuckLake share `build/emscripten` and keep RTTI, because Iceberg, Quack, and DuckLake use `dynamic_cast`. Spatial builds in `build/emscripten-spatial` with `-fno-rtti`. Hand-compiled sources get the same flags through `EXTENSION_CODEGEN_FLAGS`; mismatched flags compile out their catch blocks
 - vcpkg provides C/C++ dependencies (AWS SDK, roaring, avro-c, curl, openssl, etc.)
 
 ### Patch System
@@ -199,31 +197,31 @@ DuckDB and several extension sources require patches for WASM compatibility. Pat
 | Patch | Purpose |
 |-------|---------|
 | `duckdb/preloaded_extensions.patch` | Makes DuckDB recognize the statically linked extensions as preloaded |
-| `duckdb-avro/asyncify_explicit_file_writer_close.patch` | Closes the Avro file writer explicitly instead of in a destructor, so Asyncify can suspend |
-| `duckdb-iceberg/asyncify_explicit_manifest_close.patch` | Closes Iceberg manifest readers/writers explicitly, for the same Asyncify reason |
-| `duckdb-httpfs/s3_preserve_octet_stream_content_type.patch` | Always signs and sends the S3 `content-type` header, including `application/octet-stream` |
-| `duckdb-quack/client_only_wasm.patch`, `message_client_only_wasm.patch` | Compiles out Quack server code under `QUACK_CLIENT_ONLY_WASM` |
+| `duckdb/skip_capi_extension_tables.patch` | Stops `DatabaseInstance` from storing the C API v1/v2 extension-table builders, so the linker drops the unused C API v2 and the unexported C API v1 functions; loading a C API extension throws instead |
+| `duckdb-quack/client_only_wasm.patch` | Compiles out Quack server code, the httplib+OpenSSL fingerprint-pinned client, and the heartbeat thread under `QUACK_CLIENT_ONLY_WASM` |
 | `duckdb-spatial/emscripten-exceptions.patch` | Enables exception catching in the GEOS and PROJ vcpkg ports |
 | `duckdb-spatial/optional-gdal.patch` | Makes GDAL optional (`SPATIAL_USE_GDAL=OFF`) |
 | `duckdb-spatial/geojson-row-arena.patch` | Copies each GeoJSON result to the string heap and resets the arena per row, bounding memory |
-| `duckdb-spatial/reset-storage.patch` | Renames the R-tree `CommitDrop` override to `ResetStorage` for the DuckDB 1.5 index API |
+| `duckdb-spatial/register-geojson-without-json.patch` | Registers Spatial's own `ST_AsGeoJSON`/`ST_GeomFromGeoJSON` when the json extension isn't loaded; DuckDB 2.0 moved them to json, which our builds omit |
+
+The DuckDB 2.0 migration dropped the Avro and Iceberg Asyncify close patches, the httpfs S3 content-type patch, and the Spatial `ResetStorage` patch: upstream fixed all four.
 
 **How it works:**
 1. Build script calls `apply_patches()` before CMake configuration
 2. `apply_patch_series` applies every `*.patch` in `patches/<submodule>/` with `git apply` inside that submodule
 3. A `git apply --reverse --check` skips patches that are already applied; a patch that applies neither way fails the build
-4. duckdb, httpfs, and Spatial patches apply to every variant (Spatial's vcpkg ports are shared). Avro and Iceberg patches apply only to the iceberg flavor, which includes the browser build. Quack and DuckLake patches apply only to the ducklake flavor.
+4. duckdb, httpfs, and Spatial patches apply to every variant (Spatial's vcpkg ports are shared). Avro and Iceberg patches apply only to the iceberg flavor. Quack and DuckLake patches apply only to the ducklake flavor. Only `duckdb/`, `duckdb-quack/`, and `duckdb-spatial/` currently contain patches; missing directories are skipped.
 5. `make clean` resets the patched submodules to remove patches
 
 **Updating DuckDB version:**
-1. Update `DUCKDB_VERSION` in Makefile
-2. Run `make clean && make deps`
-3. If patches fail to apply, update patch files for new line numbers
-4. Run `make duckdb-all` to verify build works
+1. Update `DUCKDB_VERSION` and the extension pins in the Makefile, copying the SHAs from `.github/config/extensions/*.cmake` at the new DuckDB tag
+2. Run `make clean && make pin-versions && make sync-versions`; update `vcpkg_ports/avro-c` if the Avro pin moved
+3. Check each patch with `git -C deps/<submodule> apply --check`; drop patches upstream has absorbed and regenerate the rest
+4. Run `make duckdb-all`, then the package tests and Worker size checks
 
 **Creating new patches:**
 1. Make changes to the submodule's source files, e.g. `deps/duckdb/`
-2. Generate patch: `cd deps/duckdb && git diff > ../../patches/duckdb/my_fix.patch`
+2. Generate patch: `cd deps/duckdb && git diff > ../../patches/duckdb/my_fix.patch`. If earlier patches in the series touch the same file, diff only your change against the patched file; patches apply in filename order
 3. Patches in an existing `patches/<submodule>/` directory are picked up automatically. For a new submodule, add an `apply_patch_series` call to `apply_patches()` in the build script.
 4. Document the patch purpose in this section
 
@@ -245,9 +243,9 @@ Triggers: tag push (`v*`), manual dispatch
 Steps:
 1. Build WASM (browser, base Workers, Iceberg, DuckLake, and Spatial)
 2. Set package versions and build/test TypeScript packages
-3. Check Spatial's Worker size and local workerd integration
+3. Fail on a browser WASM over the 25 MiB limit, then check Spatial's Worker size and local workerd integration
 4. Publish all five packages to npm through trusted publishing (OIDC)
-5. Create GitHub release with all five WASM binaries
+5. Create GitHub release with all five WASM binaries. The body starts with `docs/releases/v<version>.md` when it exists (highlights and breaking changes), followed by the package/usage template
 
 Publishing jobs require `id-token: write`, npm 11, and a trusted publisher configured on each npm package for `tobilg/ducklings` and `release.yml`, with direct `npm publish` allowed. No `NPM_TOKEN` is used. If Spatial or the additional Iceberg package does not yet exist on npm, publish it once with ordinary npm authentication before configuring OIDC; the dry-run workflow uploads tested default Workers, Iceberg, and Spatial tarballs. See [publishing setup](docs/publishing.md).
 
@@ -255,15 +253,15 @@ Publishing jobs require `id-token: write`, npm 11, and a trusted publisher confi
 
 ### Git Submodules (deps/)
 
-Refs are pinned in the Makefile (`DUCKDB_*_VERSION`, `NANOARROW_VERSION`); `make pin-versions` checks them out.
+Refs are pinned in the Makefile (`DUCKDB_*_VERSION`, `NANOARROW_VERSION`); `make pin-versions` checks them out. Extensions are pinned to the exact commits DuckDB itself builds them with (`.github/config/extensions/*.cmake` at the DuckDB tag), not to branch heads. To move to a new DuckDB release, copy those SHAs.
 
-- `duckdb` - DuckDB source code (`DUCKDB_VERSION`, currently v1.5.6)
-- `duckdb-httpfs` - httpfs extension source (v1.5-variegata)
-- `duckdb-iceberg` - Iceberg extension source (v1.5-variegata)
-- `duckdb-avro` - Avro extension source, dependency of Iceberg (v1.5-variegata)
-- `duckdb-quack` - Quack client used by DuckLake (v1.5-variegata)
-- `ducklake` - DuckLake extension source (v1.5-variegata)
-- `duckdb-spatial` - Spatial extension source and GEOS/PROJ vcpkg ports. Pinned by the submodule commit only; `pin-versions` does not move it.
+- `duckdb` - DuckDB source code (`DUCKDB_VERSION`, currently v2.0.0)
+- `duckdb-httpfs` - httpfs extension source
+- `duckdb-iceberg` - Iceberg extension source
+- `duckdb-avro` - Avro extension source, dependency of Iceberg. Vendors `avro-c` as the nested submodule `third_party/avro-c`; `pin-versions` initializes it.
+- `duckdb-quack` - Quack client used by DuckLake
+- `ducklake` - DuckLake extension source
+- `duckdb-spatial` - Spatial extension source and GEOS/PROJ vcpkg ports
 - `nanoarrow` - Arrow IPC reader (apache-arrow-nanoarrow-0.9.0)
 
 ### vcpkg Dependencies
@@ -276,7 +274,7 @@ All variants share one `vcpkg_installed/` tree and pick their libraries at link 
 
 Initialize `deps/duckdb-spatial` for every variant. Apply its patches before the shared vcpkg install, including when building the browser first: GEOS and PROJ need exception catching enabled at compilation. Always run `vcpkg install` so its ABI checks rebuild stale dependencies; archive existence alone is not a valid cache check. CI cache keys include the SDK version, overlay ports, and Spatial patches.
 
-Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
+Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json. `vcpkg_ports/avro-c` overrides DuckDB's port registry so vcpkg builds the exact `duckdb-avro-c` commit that `deps/duckdb-avro` vendors. Update its `REF` and `SHA512` whenever the Avro pin moves.
 
 ### npm Dependencies
 
@@ -310,7 +308,7 @@ Version pins: `VCPKG_BASELINE` in Makefile, `builtin-baseline` in vcpkg.json.
 
 ### No Dynamic Extension Loading
 
-Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions are available: base Workers includes Parquet and httpfs; browser/Workers Iceberg builds include Parquet, httpfs, Avro, and Iceberg; the Workers DuckLake build includes Parquet, httpfs, the Quack client, and DuckLake; the Workers Spatial build includes Parquet, httpfs, and Spatial (GEOS + PROJ, no GDAL). JSON is omitted from the browser and all published Workers builds; only the `debug-workers*` local-debug builds include it.
+Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only statically compiled extensions are available: the browser and base Workers builds include Parquet and httpfs; the Workers Iceberg build includes Parquet, httpfs, Avro, and Iceberg; the Workers DuckLake build includes Parquet, httpfs, the Quack client, and DuckLake; the Workers Spatial build includes Parquet, httpfs, and Spatial (GEOS + PROJ, no GDAL). JSON is omitted from the browser and all published Workers builds; only the `debug-workers*` local-debug builds include it.
 
 **Why?** Dynamic extension loading in WASM requires Emscripten's `-sMAIN_MODULE` flag, which significantly increases binary size (~2-3x). This conflicts with the project's goal of minimal footprint.
 
@@ -322,6 +320,6 @@ Runtime extension loading (`INSTALL`/`LOAD` commands) is **disabled**. Only stat
 - All built-in DuckDB functions
 
 **What doesn't work:**
-- `INSTALL <ext>` → Error: "Installing external extensions is disabled through a compile time flag"
-- `LOAD <ext>` → Error: "Loading external extensions is disabled through a compile time flag"
+- `INSTALL <ext>` → Error: "Permission Error: Installing external extensions is not supported: this build does not link the loadable_extensions library"
+- `LOAD <ext>` → Error: "Permission Error: Loading external extensions is not supported: this build does not link the loadable_extensions library"
 - Any extension not compiled into the WASM binary

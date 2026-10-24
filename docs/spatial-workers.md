@@ -51,8 +51,9 @@ Use `prepareAsync()` when preparing statements against remote Parquet, and close
 
 ## Scope and checks
 
-- The local Worker bundle measured about 54.6 MiB; the included size check validates the configured uncompressed budget. Actual deployment limits must be checked for your account.
+- The local Worker bundle measured about 62.3 MiB (Wrangler `Total Upload` 63,826.38 KiB against the 65,536 KiB limit); the included size check validates the configured uncompressed budget. Actual deployment limits must be checked for your account.
 - Wasm linear memory is capped at 96 MiB. DuckDB's memory limit does not cover every allocation or establish total Worker memory safety.
+- DuckDB 2.0 moved `ST_AsGeoJSON` and `ST_GeomFromGeoJSON` into the json extension, which this build omits. A patch keeps Spatial's own implementations registered when json is not loaded.
 - The native `ST_AsGeoJSON` patch copies each final string into result storage and resets temporary JSON arena allocations per row. This prevents temporary JSON trees accumulating across a vector.
 - Prepared-result cleanup now destroys native results on success and failure. HTTP transport preserves supplied headers and supports the scoped headers needed by remote Parquet reads.
 - The local workerd integration test covers spatial predicates, precision-reduced GeoJSON, projection, an R-tree, remote GeoParquet range reads, prepared parameters, repeated requests, and a 4,097-row/null serializer lifetime regression.
