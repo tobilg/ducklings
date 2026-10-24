@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  EMSDK_VERSION: '4.0.22'
+  EMSDK_VERSION: '6.0.13'
   NODE_VERSION: '22'
   CF_PAGES_MAX_FILE_BYTES: '26214400'
 

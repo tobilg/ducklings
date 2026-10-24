@@ -598,8 +598,8 @@ compile_source_if_needed() {
 
     mkdir -p "$(dirname "${obj}")"
 
-    # Timestamps miss flag changes (e.g. objects restored from the CI cache), so the flags are recorded per object.
-    local flags="${EXTENSION_CODEGEN_FLAGS} $*"
+    # Timestamps miss flag and compiler changes (e.g. objects restored from the CI cache), so both are recorded per object.
+    local flags="emcc-${EMCC_VERSION:-unknown} ${EXTENSION_CODEGEN_FLAGS} $*"
     local flags_file="${obj%.o}.flags"
     if depfile_needs_rebuild "${dep}" "${obj}" || [ "$(cat "${flags_file}" 2>/dev/null)" != "${flags}" ]; then
         log_info "  Compiling ${label}..."
@@ -711,12 +711,37 @@ compile_quack_source_if_needed() {
         -I"${VCPKG_INSTALLED}/include"
 }
 
+emcc_version() {
+    emcc --version 2>/dev/null | head -n1 | sed -E 's/.* ([0-9]+\.[0-9]+\.[0-9]+).*/\1/'
+}
+
 check_emscripten() {
+    # The vcpkg ports and size budgets are validated against one SDK; other versions (e.g. Homebrew's) break the
+    # zlib port. A project-local SDK in build/emsdk is activated when the emcc on PATH is not the pinned one.
+    local required="${DUCKLINGS_EMSDK_VERSION:-6.0.13}"
+    local local_emsdk="${PROJECT_ROOT}/build/emsdk"
+    if [ "$(emcc_version)" != "${required}" ] && [ -f "${local_emsdk}/emsdk_env.sh" ]; then
+        log_info "Activating the Emscripten SDK in ${local_emsdk}"
+        set +u
+        source "${local_emsdk}/emsdk_env.sh" > /dev/null 2>&1
+        set -u
+        export PATH="${EMSDK}/upstream/bin:${PATH}"
+    fi
     if ! command -v emcc &> /dev/null; then
         log_error "Emscripten (emcc) not found in PATH"
-        log_info "Install Emscripten: brew install emscripten"
+        log_info "Install Emscripten ${required}: emsdk install ${required} && emsdk activate ${required}"
         exit 1
     fi
+    local found
+    found="$(emcc_version)"
+    if [ "${found}" != "${required}" ]; then
+        log_error "Emscripten ${required} required, found ${found:-unknown} at $(command -v emcc)"
+        log_info "Activate it with: emsdk install ${required} && emsdk activate ${required} && source <emsdk>/emsdk_env.sh"
+        log_info "To try another SDK on purpose, set DUCKLINGS_EMSDK_VERSION=${found}"
+        exit 1
+    fi
+    EMCC_VERSION="${found}"
+    export EMCC_VERSION
     log_info "Found Emscripten: $(emcc --version | head -n1)"
 }
 
@@ -835,8 +860,15 @@ apply_patches() {
 
 setup_build_dir() {
     log_info "Setting up build directory: $BUILD_DIR"
+    # CMake only compares timestamps, so it would keep objects compiled by another Emscripten version.
+    local stamp="${BUILD_DIR}/.emcc-version"
+    if [ -f "${stamp}" ] && [ "$(cat "${stamp}")" != "${EMCC_VERSION}" ]; then
+        log_warn "${BUILD_DIR} was built with Emscripten $(cat "${stamp}"); rebuilding it from scratch with ${EMCC_VERSION}"
+        rm -rf "${BUILD_DIR}"
+    fi
     mkdir -p "$BUILD_DIR"
     mkdir -p "$DIST_DIR"
+    printf '%s\n' "${EMCC_VERSION}" > "${stamp}"
 }
 
 prepare_duckdb_extension_config_override() {
@@ -891,11 +923,24 @@ configure_duckdb() {
     fi
 
     # DuckDB 2.0 no longer derives its version from git describe; report the tag the submodule is pinned to.
+    # The version comes from the Makefile pin: CI checks the submodule out without tags, and without an explicit
+    # version DuckDB reports a development version (v2.0.0-dev1). Non-release pins fall back to git describe.
     local -a VERSION_CMAKE_FLAGS=()
+    local duckdb_version=""
     local duckdb_tag=""
-    if duckdb_tag="$(git -C "$DUCKDB_SRC" describe --tags --exact-match 2>/dev/null)"; then
-        VERSION_CMAKE_FLAGS=("-DDUCKDB_EXPLICIT_VERSION=${duckdb_tag}")
-        log_info "  DuckDB version: ${duckdb_tag}"
+    duckdb_version="$(sed -n 's/^DUCKDB_VERSION[[:space:]]*:=[[:space:]]*//p' "${PROJECT_ROOT}/Makefile")"
+    duckdb_tag="$(git -C "$DUCKDB_SRC" describe --tags --exact-match 2>/dev/null || true)"
+    if [[ "${duckdb_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [ -n "${duckdb_tag}" ] && [ "${duckdb_tag}" != "${duckdb_version}" ]; then
+            log_error "deps/duckdb is at ${duckdb_tag}, but the Makefile pins ${duckdb_version}; run 'make pin-versions'"
+            exit 1
+        fi
+    else
+        duckdb_version="${duckdb_tag}"
+    fi
+    if [ -n "${duckdb_version}" ]; then
+        VERSION_CMAKE_FLAGS=("-DDUCKDB_EXPLICIT_VERSION=${duckdb_version}")
+        log_info "  DuckDB version: ${duckdb_version}"
     fi
 
     emcmake cmake "$DUCKDB_SRC" \
@@ -1849,8 +1894,8 @@ MAINEOF
     local JS_LIBRARY_FLAGS="--js-library ${HTTP_WASM_SRC}/http_async.js"
     log_info "  Including HTTP library: ${HTTP_WASM_SRC}/http_async.js"
 
-    # Link with Emscripten
-    emcc -Oz \
+    # Link with em++: Emscripten 6 links libc++ and libc++abi only for em++, not emcc.
+    em++ -Oz \
         -flto \
         -std=c++17 \
         -DNDEBUG \
@@ -2036,8 +2081,8 @@ print_summary() {
             log_info "  2. Build example: pnpm --filter @ducklings/example-cloudflare-worker build"
         fi
     else
-        log_info "  1. Build TypeScript package: cd packages/ducklings-browser && pnpm build"
-        log_info "  2. Run example: cd examples/browser && pnpm dev"
+        log_info "  1. Build TypeScript package: make typescript-browser"
+        log_info "  2. Run example: make example"
     fi
 }
 

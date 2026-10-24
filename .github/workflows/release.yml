@@ -18,7 +18,7 @@ on:
         default: false
 
 env:
-  EMSDK_VERSION: '4.0.22'
+  EMSDK_VERSION: '6.0.13'
   NODE_VERSION: '22'
   NPM_VERSION: '11' # OIDC requires npm >= 11.5.1 and Node >= 22.14.0.
   CF_PAGES_MAX_FILE_BYTES: '26214400'

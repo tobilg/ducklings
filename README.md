@@ -137,11 +137,11 @@ export default {
 
 | Package | API Style | Size (gzipped) | Extension focus |
 |---------|-----------|----------------|-----------------|
-| `@ducklings/browser` | Async (Web Worker) | ~7.2 MiB | httpfs + Parquet |
-| `@ducklings/workers` | Async (Asyncify) | ~12.6 MiB | httpfs + Parquet |
-| `@ducklings/workers-iceberg` | Async (Asyncify) | ~13.7 MiB | httpfs + Parquet + Avro + Iceberg |
-| `@ducklings/workers-ducklake` | Async (Asyncify) | ~13.5 MiB | Workers + DuckLake |
-| `@ducklings/workers-spatial` | Async (Asyncify) | ~15.8 MiB | Workers + Spatial (GEOS + PROJ) |
+| `@ducklings/browser` | Async (Web Worker) | ~7.1 MiB | httpfs + Parquet |
+| `@ducklings/workers` | Async (Asyncify) | ~12.3 MiB | httpfs + Parquet |
+| `@ducklings/workers-iceberg` | Async (Asyncify) | ~13.4 MiB | httpfs + Parquet + Avro + Iceberg |
+| `@ducklings/workers-ducklake` | Async (Asyncify) | ~13.2 MiB | Workers + DuckLake |
+| `@ducklings/workers-spatial` | Async (Asyncify) | ~15.5 MiB | Workers + Spatial (GEOS + PROJ) |
 
 #### Arrow IPC Endpoint
 
@@ -800,7 +800,7 @@ The workflow publishes with `--tag dev` so it won't affect `latest`.
 │   dist/               │               │               │   dist/               │
 │   ├── duckdb.js       │               │               │   ├── duckdb-workers  │
 │   └── duckdb.wasm     │               │               │   │   .js             │
-│      (~7.2MiB gz)     │               │               │   └── duckdb-workers  │
+│      (~7.1MiB gz)     │               │               │   └── duckdb-workers  │
 └───────────┬───────────┘               │               │       .wasm (base)    │
             │                           │               └───────────┬───────────┘
             │                           │                           │
@@ -835,7 +835,7 @@ ducklings/
 │   └── nanoarrow/                 # Arrow IPC reader
 ├── dist/                          # WASM build output
 │   ├── duckdb.js                  # Browser JS glue
-│   ├── duckdb.wasm                # Browser WASM (~7.2 MiB gzipped)
+│   ├── duckdb.wasm                # Browser WASM (~7.1 MiB gzipped)
 │   ├── duckdb-workers.js          # Base Workers JS glue (with Asyncify)
 │   ├── duckdb-workers.wasm        # Base Workers WASM (httpfs + Parquet)
 │   ├── duckdb-workers-iceberg.js  # Iceberg Workers JS glue
@@ -895,7 +895,7 @@ ducklings/
 │  Type marshalling, memory management, HEAP access               │
 ├─────────────────────────────────┬───────────────────────────────┤
 │  @ducklings/browser             │   @ducklings/workers          │
-│  Browser WASM (~7.2MiB gz)      │   Workers WASM (base)        │
+│  Browser WASM (~7.1MiB gz)      │   Workers WASM (base)        │
 │  - Web Worker + XMLHttpRequest  │   - Asyncify + fetch()        │
 │  - Async API (Promises)         │   - Async API (Promises)      │
 └─────────────────────────────────┴───────────────────────────────┘

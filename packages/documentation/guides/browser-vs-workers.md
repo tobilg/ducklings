@@ -13,7 +13,7 @@ Ducklings provides packages optimized for different JavaScript runtime environme
 | --------- | ------------------- | ------------------- | ---------------------------- | ------------------------------- |
 | **Runtime** | Browsers | Cloudflare Workers | Cloudflare Workers | Cloudflare Workers |
 | **Async mechanism** | Web Workers + postMessage | Asyncify (Emscripten) | Asyncify (Emscripten) | Asyncify (Emscripten) |
-| **WASM size (gzipped)** | ~7.2 MiB | ~12.6 MiB | ~13.7 MiB | ~13.5 MiB |
+| **WASM size (gzipped)** | ~7.1 MiB | ~12.3 MiB | ~13.4 MiB | ~13.2 MiB |
 | **HTTP support** | Via httpfs extension | Native async fetch() | Native async fetch() | Native async fetch() |
 | **Lakehouse extension** | None | None | Iceberg | DuckLake |
 | **JSON extension** | Not bundled | Not bundled | Not bundled | Not bundled |
@@ -98,7 +98,7 @@ export default {
 
 1. **Web Workers don't exist in Cloudflare Workers runtime** - The browser package uses Web Workers for non-blocking operations, but CF Workers has a different threading model.
 
-2. **Asyncify roughly doubles the WASM** - The workers package includes Emscripten's Asyncify which enables async operations (like fetch) inside WASM. Together with the JavaScript-based exception handling Asyncify requires, the base Workers WASM is about 50.4 MiB uncompressed, against 24.7 MiB for the browser build with the same extensions.
+2. **Asyncify roughly doubles the WASM** - The workers package includes Emscripten's Asyncify which enables async operations (like fetch) inside WASM. Together with the JavaScript-based exception handling Asyncify requires, the base Workers WASM is about 49.6 MiB uncompressed, against 24.7 MiB for the browser build with the same extensions.
 
 3. **Different optimization targets** - Browser builds prioritize size and UI responsiveness, while serverless builds prioritize async I/O compatibility.
 

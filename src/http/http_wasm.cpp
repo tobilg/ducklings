@@ -100,7 +100,9 @@ static char* em_sync_head_request(const char* url, int header_count, char** head
                 var headerName = UTF8ToString(ptr1);
                 var headerValue = UTF8ToString(ptr2);
                 if (headerName === "Host") headerName = "X-Host-Override";
-                if (headerName === "User-Agent") headerName = "X-User-Agent";
+                // Browsers set User-Agent themselves; renaming it to a custom header would force a CORS preflight
+                // that static hosts such as raw.githubusercontent.com reject.
+                if (headerName === "User-Agent") continue;
                 xhr.setRequestHeader(headerName, headerValue);
             } catch (error) {
                 console.warn("Error setting header:", error);
@@ -179,7 +181,9 @@ static char* em_sync_request(const char* url, const char* method, int header_cou
                 var headerName = UTF8ToString(ptr1);
                 var headerValue = UTF8ToString(ptr2);
                 if (headerName === "Host") headerName = "X-Host-Override";
-                if (headerName === "User-Agent") headerName = "X-User-Agent";
+                // Browsers set User-Agent themselves; renaming it to a custom header would force a CORS preflight
+                // that static hosts such as raw.githubusercontent.com reject.
+                if (headerName === "User-Agent") continue;
                 xhr.setRequestHeader(headerName, headerValue);
             } catch (error) {
                 console.warn("Error setting header:", error);

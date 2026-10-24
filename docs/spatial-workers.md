@@ -10,7 +10,7 @@ Maintainers must complete the [initial npm publication and trusted publisher set
 
 ## Build
 
-Use Node.js 22+, pnpm, CMake, Python/uv, and Emscripten **4.0.22**. Initialize the pinned submodules, activate the SDK, and put its `wasm-opt` on PATH:
+Use Node.js 22+, pnpm, CMake, Python/uv, and Emscripten **6.0.13**. Initialize the pinned submodules, activate the SDK, and put its `wasm-opt` on PATH:
 
 ```sh
 git submodule update --init --recursive
@@ -51,7 +51,7 @@ Use `prepareAsync()` when preparing statements against remote Parquet, and close
 
 ## Scope and checks
 
-- The local Worker bundle measured about 62.3 MiB (Wrangler `Total Upload` 63,826.38 KiB against the 65,536 KiB limit); the included size check validates the configured uncompressed budget. Actual deployment limits must be checked for your account.
+- The local Worker bundle measured about 61.5 MiB (Wrangler `Total Upload` 62,927.47 KiB against the 65,536 KiB limit); the included size check validates the configured uncompressed budget. Actual deployment limits must be checked for your account.
 - Wasm linear memory is capped at 96 MiB. DuckDB's memory limit does not cover every allocation or establish total Worker memory safety.
 - DuckDB 2.0 moved `ST_AsGeoJSON` and `ST_GeomFromGeoJSON` into the json extension, which this build omits. A patch keeps Spatial's own implementations registered when json is not loaded.
 - The native `ST_AsGeoJSON` patch copies each final string into result storage and resets temporary JSON arena allocations per row. This prevents temporary JSON trees accumulating across a vector.

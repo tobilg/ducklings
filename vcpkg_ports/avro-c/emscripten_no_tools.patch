@@ -1,0 +1,18 @@
+diff --git a/lang/c/src/CMakeLists.txt b/lang/c/src/CMakeLists.txt
+index 25ca3b1..afa4878 100644
+--- a/lang/c/src/CMakeLists.txt
++++ b/lang/c/src/CMakeLists.txt
+@@ -112,6 +112,8 @@ configure_file(avro-c.pc.in avro-c.pc)
+ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/avro-c.pc
+         DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+ 
++# The command-line tools are C programs linking the C++ snappy codec, which emcc does not link libc++ for.
++if (NOT EMSCRIPTEN)
+ add_executable(avrocat avrocat.c)
+ target_link_libraries(avrocat avro-static)
+ install(TARGETS avrocat RUNTIME DESTINATION bin)
+@@ -130,3 +132,4 @@ add_executable(avromod avromod.c)
+ target_link_libraries(avromod avro-static)
+ install(TARGETS avromod RUNTIME DESTINATION bin)
+ endif(NOT WIN32)
++endif(NOT EMSCRIPTEN)

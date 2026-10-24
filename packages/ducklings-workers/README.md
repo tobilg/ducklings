@@ -124,8 +124,8 @@ The published browser and workers packages do not bundle the `json` extension. R
 
 | Package | API Style | Size (gzipped) | httpfs |
 |---------|-----------|----------------|--------|
-| `@ducklings/browser` | Async (Web Worker) | ~7.2 MiB | XMLHttpRequest |
-| `@ducklings/workers` | Async (Asyncify) | ~12.6 MiB | fetch() via Asyncify |
+| `@ducklings/browser` | Async (Web Worker) | ~7.1 MiB | XMLHttpRequest |
+| `@ducklings/workers` | Async (Asyncify) | ~12.3 MiB | fetch() via Asyncify |
 
 ## API
 

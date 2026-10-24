@@ -325,7 +325,7 @@ rebuild: clean all
 # Check required tools are installed
 check-deps:
 	@echo "Checking required dependencies..."
-	@command -v emcc >/dev/null 2>&1 || { echo "emcc not found. Install and activate Emscripten SDK 4.0.22 (emsdk install 4.0.22 && emsdk activate 4.0.22)"; exit 1; }
+	@command -v emcc >/dev/null 2>&1 || { echo "emcc not found. Install and activate Emscripten SDK 6.0.13 (emsdk install 6.0.13 && emsdk activate 6.0.13)"; exit 1; }
 	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm not found. Install: npm install -g pnpm"; exit 1; }
 	@command -v cmake >/dev/null 2>&1 || { echo "cmake not found. Install: brew install cmake"; exit 1; }
 	@emcc --version | head -n1

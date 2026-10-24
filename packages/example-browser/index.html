@@ -234,7 +234,7 @@
                 <li><code onclick="setQuery(this.textContent)">SELECT current_timestamp AS now, version() AS version</code></li>
                 <li><code onclick="setQuery(this.textContent)">CREATE TABLE test (id INT, name VARCHAR); INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob'); SELECT * FROM test;</code></li>
                 <li><strong>Remote (httpfs):</strong></li>
-                <li><code onclick="setQuery(this.textContent)">SELECT * FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/orders.parquet' LIMIT 5</code></li>
+                <li><code onclick="setQuery(this.textContent)">SELECT * FROM 'https://blobs.duckdb.org/train_services.parquet' LIMIT 5</code></li>
             </ul>
         </details>
     </div>

@@ -16,7 +16,7 @@ if (VCPKG_TARGET_IS_EMSCRIPTEN)
   set(cross_compiling 1)
   set(VCPKG_CROSSCOMPILING 1)
 
-  set(OPTIONAL_DUCKDB_PATCHES "${ADDITIONAL_PATCHES} static_link_only.patch")
+  set(OPTIONAL_DUCKDB_PATCHES "${ADDITIONAL_PATCHES} static_link_only.patch emscripten_no_tools.patch")
 endif()
 separate_arguments(OPTIONAL_DUCKDB_PATCHES)
 

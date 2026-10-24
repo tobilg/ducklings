@@ -93,7 +93,7 @@ ducklings/
 
 - Node.js 18+
 - pnpm 9+
-- Emscripten SDK 4.0.22, activated with `source <emsdk>/emsdk_env.sh` and `$EMSDK/upstream/bin` first in `PATH`. Other `emcc` versions (e.g. Homebrew's) fail to build vcpkg's zlib
+- Emscripten SDK 6.0.13. The build script stops on any other `emcc` version (e.g. Homebrew's), after first activating a project-local SDK in `build/emsdk` if one exists. Override deliberately with `DUCKLINGS_EMSDK_VERSION`. Each build directory records its `emcc` version and starts over when it changes
 - Binaryen (for wasm-opt)
 - git (for vcpkg clone during build)
 

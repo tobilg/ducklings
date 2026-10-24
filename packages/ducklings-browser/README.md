@@ -32,7 +32,7 @@ await db.close();
 ## Features
 
 - Async API - queries run in Web Worker, UI stays responsive
-- ~7.2 MiB gzipped WASM
+- ~7.1 MiB gzipped WASM
 - Built-in Parquet and httpfs extensions
 - Arrow Table support via Flechette (query + insert)
 - Prepared statements with type-safe parameter binding

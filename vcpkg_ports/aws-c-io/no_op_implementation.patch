@@ -24,7 +24,7 @@ index 0ec298d..6dea0f7 100644
  static enum aws_event_loop_type s_default_event_loop_type_override = AWS_EVENT_LOOP_PLATFORM_DEFAULT;
  
 +
-+#ifdef EMSCRIPTEN
++#ifdef __EMSCRIPTEN__
 +int aws_default_dns_resolve(
 +    struct aws_allocator *allocator,
 +    const struct aws_string *host_name,
@@ -42,7 +42,7 @@ index 0ec298d..6dea0f7 100644
   * If `aws_event_loop_override_default_type` has been called, return the override default type.
   */
  enum aws_event_loop_type aws_event_loop_get_default_type(void) {
-+#ifdef EMSCRIPTEN
++#ifdef __EMSCRIPTEN__
 +    return s_default_event_loop_type_override;
 +#else
      if (s_default_event_loop_type_override != AWS_EVENT_LOOP_PLATFORM_DEFAULT) {
@@ -65,7 +65,7 @@ index e8a5216..18f5274 100644
  static bool s_io_library_initialized = false;
  
 +
-+#ifdef EMSCRIPTEN
++#ifdef __EMSCRIPTEN__
 +void aws_tls_init_static_state(struct aws_allocator *alloc) {}
 +void aws_tls_clean_up_static_state(void) {}
 +#else
@@ -83,7 +83,7 @@ index 22cd1fc..f19579c 100644
  
  /* Update socket->local_endpoint based on the results of getsockname() */
  static int s_update_local_endpoint(struct aws_socket *socket) {
-+#ifdef EMSCRIPTEN
++#ifdef __EMSCRIPTEN__
 +    return 0;
 +#else
      struct aws_socket_endpoint tmp_endpoint;
@@ -102,7 +102,7 @@ index 22cd1fc..f19579c 100644
      int events,
      void *user_data) {
 -
-+#ifdef EMSCRIPTEN
++#ifdef __EMSCRIPTEN__
 +    return;
 +#else
      (void)event_loop;
@@ -124,7 +124,7 @@ index 353877b..8101337 100644
  
  #include <aws/common/string.h>
  
-+#ifdef EMSCRIPTEN
++#ifdef __EMSCRIPTEN__
 +struct aws_tls_ctx *aws_tls_client_ctx_new(
 +    struct aws_allocator *alloc,
 +    const struct aws_tls_ctx_options *options) {

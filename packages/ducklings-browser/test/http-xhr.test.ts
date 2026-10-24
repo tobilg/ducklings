@@ -13,6 +13,7 @@ interface FakeResponse {
  */
 class FakeXMLHttpRequest {
   static respond: (method: string, url: string) => FakeResponse = () => ({ status: 404 });
+  static requestHeaders: string[] = [];
 
   status = 0;
   statusText = '';
@@ -27,7 +28,9 @@ class FakeXMLHttpRequest {
     this.url = url;
   }
 
-  setRequestHeader() {}
+  setRequestHeader(name: string) {
+    FakeXMLHttpRequest.requestHeaders.push(name);
+  }
 
   send() {
     const result = FakeXMLHttpRequest.respond(this.method, this.url);
@@ -71,5 +74,37 @@ describe('HTTP failures handled inside extensions', () => {
       "SELECT a::INTEGER AS a, b::INTEGER AS b FROM read_csv('http://ducklings.invalid/data.csv')",
     );
     expect(rows).toEqual([{ a: 1, b: 2 }]);
+  });
+});
+
+// A header outside the CORS safelist makes the browser send a preflight, which static hosts such as
+// raw.githubusercontent.com answer with 403. Anonymous reads must only send safelisted headers.
+describe('XMLHttpRequest headers', () => {
+  let conn: Connection;
+  const globals = globalThis as { XMLHttpRequest?: unknown };
+  const originalXHR = globals.XMLHttpRequest;
+  const safelisted = ['accept', 'accept-language', 'content-language', 'content-type', 'range'];
+
+  beforeAll(async () => {
+    globals.XMLHttpRequest = FakeXMLHttpRequest;
+    conn = await getDB().connect();
+  });
+
+  afterAll(() => {
+    globals.XMLHttpRequest = originalXHR;
+  });
+
+  it('should only send CORS-safelisted headers for anonymous reads', async () => {
+    const body = 'a,b\n1,2\n';
+    FakeXMLHttpRequest.requestHeaders = [];
+    FakeXMLHttpRequest.respond = (method) => ({
+      status: 200,
+      headers: { 'Content-Length': String(body.length), 'Accept-Ranges': 'bytes' },
+      body: method === 'HEAD' ? undefined : body,
+    });
+
+    await conn.query("SELECT * FROM read_csv('https://ducklings.invalid/data.csv')");
+    const unsafe = FakeXMLHttpRequest.requestHeaders.filter((name) => !safelisted.includes(name.toLowerCase()));
+    expect(unsafe).toEqual([]);
   });
 });
