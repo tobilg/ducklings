@@ -523,7 +523,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name ducklings
+          # Tag pushes check out a detached HEAD; without --branch, Wrangler makes a "head" preview, not production.
+          command: pages deploy dist --project-name ducklings --branch main
           workingDirectory: packages/example-browser
 
   # Deploy API documentation to Cloudflare Pages
