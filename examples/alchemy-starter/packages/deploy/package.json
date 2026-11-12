@@ -1,0 +1,27 @@
+{
+  "name": "@ducklings/alchemy-deploy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ALCHEMY_DEV=true bun --env-file=../../.env x alchemy dev alchemy.run.ts",
+    "deploy": "bun --env-file=../../.env x alchemy deploy alchemy.run.ts --stage ${ALCHEMY_STAGE:-prod} --yes --adopt",
+    "seed": "bun --env-file=../../.env scripts/seed.ts",
+    "bench": "bun scripts/bench.ts",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.86",
+    "@aws-sdk/client-s3": "^3.900.0",
+    "@ducklings/alchemy-shared": "workspace:*",
+    "@effect/platform-bun": "^4.1.4",
+    "@effect/platform-node": "^4.1.4",
+    "effect": "^4.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "alchemy": "2.0.0-beta.86",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}

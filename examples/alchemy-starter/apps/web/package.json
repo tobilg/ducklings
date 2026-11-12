@@ -1,0 +1,37 @@
+{
+  "name": "@ducklings/alchemy-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev:ui": "vite --port 5183",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ducklings/alchemy-shared": "workspace:*",
+    "@effect/atom-react": "^4.1.4",
+    "@radix-ui/react-slot": "^1.2.1",
+    "@tanstack/charts": "^1.5.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "effect": "^4.1.4",
+    "lucide-react": "^1.72.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "scheduler": "^0.28.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.69.1",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "wrangler": "^4.160.0"
+  }
+}
