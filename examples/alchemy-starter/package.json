@@ -1,0 +1,19 @@
+{
+  "name": "@ducklings/alchemy-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter @ducklings/alchemy-engine build && bun run --filter @ducklings/alchemy-deploy dev",
+    "build": "bun run --filter @ducklings/alchemy-engine build && bun run --filter @ducklings/alchemy-web build",
+    "deploy": "bun run --filter @ducklings/alchemy-engine build && bun run --filter @ducklings/alchemy-deploy deploy",
+    "seed": "bun packages/deploy/scripts/seed.ts",
+    "bench": "bun packages/deploy/scripts/bench.ts",
+    "check-types": "bun run --filter '*' check-types",
+    "clean": "rm -rf apps/web/dist apps/engine/dist apps/web/.alchemy packages/deploy/.alchemy"
+  }
+}

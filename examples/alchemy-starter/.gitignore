@@ -1,0 +1,9 @@
+node_modules
+dist
+.alchemy
+bench-results
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
