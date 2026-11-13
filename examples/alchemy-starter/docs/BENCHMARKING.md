@@ -200,6 +200,9 @@ examples/alchemy-starter/
   The WASM module is initialized once per isolate; database creation and Parquet
   registration are per request, matching Braven's engine and keeping heap state
   from accumulating across benchmark runs.
+- A query loads only the Parquet files it reads (`QueryDefinition.files`), and
+  the isolate caches their bytes. A second query over the same file pays
+  registration, not R2; a single-file query never touches the other tables.
 - Requests are not serialized. A query that never resolves is bounded by a 25s
   engine timeout and the browser's 45s timeout, so one bad query cannot block
   the rest of the catalogue.

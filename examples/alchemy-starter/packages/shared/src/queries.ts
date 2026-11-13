@@ -38,6 +38,8 @@ export class QueryDefinition extends Schema.Class<QueryDefinition>(
   title: Schema.NonEmptyString,
   category: QueryCategory,
   description: Schema.String,
+  /** Registered files this statement reads; the engine loads only these. */
+  files: Schema.NonEmptyArray(Schema.NonEmptyString),
   /** Runs against the registered dataset files, never against client input. */
   sql: Schema.NonEmptyString,
   dataset: Schema.NonEmptyString,
@@ -51,6 +53,7 @@ export const QUERIES: ReadonlyArray<QueryDefinition> = [
     description:
       "Full scan of the largest table: row count, distinct orders, units and gross revenue.",
     dataset: TPCH.id,
+    files: ["lineitem.parquet"],
     sql: `SELECT
   count(*) AS line_items,
   count(DISTINCT l_orderkey) AS orders,
@@ -65,6 +68,7 @@ FROM read_parquet('lineitem.parquet')`,
     description:
       "Grouped aggregation with a derived date part — the classic first query on any dataset.",
     dataset: TPCH.id,
+    files: ["lineitem.parquet"],
     sql: `SELECT
   year(l_shipdate) AS ship_year,
   count(*) AS line_items,
@@ -80,6 +84,7 @@ ORDER BY ship_year`,
     description:
       "Three-way join across customer, orders and line item, grouped with GROUP BY ALL.",
     dataset: TPCH.id,
+    files: ["customer.parquet", "orders.parquet", "lineitem.parquet"],
     sql: `SELECT
   c.c_custkey AS customer_id,
   c.c_name AS customer,
@@ -102,6 +107,7 @@ LIMIT 10`,
     description:
       "CTE referenced twice: a scalar subquery for the average and a window comparison.",
     dataset: TPCH.id,
+    files: ["supplier.parquet"],
     sql: `WITH balances AS (
   SELECT s_suppkey, s_name, s_acctbal
   FROM read_parquet('supplier.parquet')
@@ -121,6 +127,7 @@ ORDER BY s_acctbal DESC`,
     description:
       "Per-ship-mode quantiles — a good check that the Parquet statistics are being used.",
     dataset: TPCH.id,
+    files: ["lineitem.parquet"],
     sql: `SELECT
   l_shipmode AS ship_mode,
   count(*) AS line_items,
@@ -138,6 +145,7 @@ ORDER BY line_items DESC`,
     description:
       "Date truncation plus a grouped aggregate — the shape most dashboards ask for.",
     dataset: TPCH.id,
+    files: ["orders.parquet"],
     sql: `SELECT
   strftime(o_orderdate, '%Y-%m') AS month,
   o_orderpriority AS priority,
@@ -154,6 +162,7 @@ ORDER BY month, priority`,
     description:
       "The canonical TPC-H Q1: filtered scan, six aggregates, grouped by return status.",
     dataset: TPCH.id,
+    files: ["lineitem.parquet"],
     sql: `SELECT
   l_returnflag,
   l_linestatus,
@@ -174,6 +183,7 @@ ORDER BY l_returnflag, l_linestatus`,
     description:
       "DESCRIBE over the largest file — metadata only, no row scan.",
     dataset: TPCH.id,
+    files: ["lineitem.parquet"],
     sql: `DESCRIBE SELECT * FROM read_parquet('lineitem.parquet')`,
   }),
   new QueryDefinition({
@@ -183,6 +193,7 @@ ORDER BY l_returnflag, l_linestatus`,
     description:
       "The join behind the window query, without the ranking — isolates join cost from window cost.",
     dataset: TPCH.id,
+    files: ["part.parquet", "lineitem.parquet"],
     sql: `SELECT
   count(*) AS pairs,
   round(sum(l.l_extendedprice * (1 - l_discount)), 2) AS net_revenue
@@ -197,6 +208,7 @@ JOIN read_parquet('lineitem.parquet') AS l
     description:
       "The smallest table on its own — isolates a single-file read from the join.",
     dataset: TPCH.id,
+    files: ["part.parquet"],
     sql: `SELECT
   count(*) AS parts,
   round(sum(p_retailprice), 2) AS retail_value,

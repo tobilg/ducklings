@@ -52,15 +52,15 @@ import {
 /** A result set is capped so a query cannot stream the whole dataset back. */
 const MAX_ROWS = 200;
 
-/** Concurrent Parquet reads per boot — enough to hide R2 latency, few enough
- *  that eight objects do not all sit in the 96 MB heap at once. */
+/** Concurrent Parquet reads for one request — enough to hide R2 latency,
+ *  few enough that the query's objects do not all sit in the heap at once. */
 const LOAD_CONCURRENCY = 4;
 
 /** DuckDB's default memory ceiling is the isolate's; leave headroom for JS. */
 const MEMORY_LIMIT = "100MB";
 
 /** Bump to force a fresh isolate on the next deploy. */
-const ENGINE_REVISION = "2026-11-12.5";
+const ENGINE_REVISION = "2026-11-13.3";
 
 export type RunMode = BenchmarkMode;
 
@@ -74,17 +74,27 @@ interface Runtime {
   readonly db: DuckDB;
   readonly conn: Connection;
   readonly initMs: number;
-  readonly dataset: DatasetStatus;
+  /** Files registered into this database. */
+  readonly registered: Set<string>;
 }
 
 /**
- * The database lives for one request, like Braven's engine: the WASM module is
- * initialized once, but every query gets a fresh database and connection. That
- * keeps repeated benchmark runs from accumulating heap state in a long-lived
- * connection, which is what wedged the isolate.
+ * The database is reused inside an isolate, but files are registered on
+ * demand: a query only pays for the Parquet it reads, and bytes survive across
+ * requests. `reset` closes the database and clears both caches.
  */
+let runtime: Option.Option<Runtime> = Option.none();
 let lastDataset: Option.Option<DatasetStatus> = Option.none();
 let initialized = false;
+
+/** Parquet bytes survive across requests; a fresh database does not. */
+const bytesCache = new Map<
+  string,
+  { readonly bytes: Uint8Array; readonly source: "r2" | "http" }
+>();
+
+/** The union of files this isolate has loaded, for the dataset card. */
+const loadedFiles = new Map<string, DatasetFileStatus>();
 
 const messageOf = (cause: unknown): string =>
   P.isObject(cause) && "message" in cause && P.isString(cause.message)
@@ -132,23 +142,17 @@ const meanOf = (values: readonly number[]): number =>
 
 interface LoadedBytes {
   readonly bytes: Uint8Array;
-  readonly source: "r2" | "http";
+  readonly source: "r2" | "http" | "cache";
 }
 
 /** Concatenate the response body's chunks without assuming a Node `Buffer`. */
-const collectBytes = (
-  chunks: Iterable<Uint8Array>,
-): Uint8Array =>
-  Arr.reduce(
-    Arr.fromIterable(chunks),
-    new Uint8Array(0),
-    (acc, chunk) => {
-      const next = new Uint8Array(acc.length + chunk.length);
-      next.set(acc);
-      next.set(chunk, acc.length);
-      return next;
-    },
-  );
+const collectBytes = (chunks: Iterable<Uint8Array>): Uint8Array =>
+  Arr.reduce(Arr.fromIterable(chunks), new Uint8Array(0), (acc, chunk) => {
+    const next = new Uint8Array(acc.length + chunk.length);
+    next.set(acc);
+    next.set(chunk, acc.length);
+    return next;
+  });
 
 const loadFile = (
   env: Env,
@@ -156,6 +160,11 @@ const loadFile = (
   url: string,
 ): Effect.Effect<LoadedBytes, DatasetLoadError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
+    const cached = bytesCache.get(key);
+    if (cached) {
+      return { bytes: cached.bytes, source: "cache" };
+    }
+
     const requested = env.DATASET_SOURCE ?? "auto";
     const bucket = env.BUCKET;
 
@@ -175,7 +184,12 @@ const loadFile = (
               message: `R2 body failed for ${key}: ${messageOf(cause)}`,
             }),
         });
-        return { bytes: new Uint8Array(bytes), source: "r2" };
+        const entry = {
+          bytes: new Uint8Array(bytes),
+          source: "r2" as const,
+        };
+        bytesCache.set(key, entry);
+        return entry;
       }
       if (requested === "r2") {
         return yield* Effect.fail(
@@ -212,16 +226,14 @@ const loadFile = (
           }),
       ),
     );
-    return { bytes: collectBytes(chunks), source: "http" };
+    const entry = { bytes: collectBytes(chunks), source: "http" as const };
+    bytesCache.set(key, entry);
+    return entry;
   });
 
 const createRuntime = (
   env: Env,
-): Effect.Effect<
-  Runtime,
-  EngineInitError | DatasetLoadError,
-  HttpClient.HttpClient
-> =>
+): Effect.Effect<Runtime, EngineInitError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const initStarted = yield* Clock.monotonicTimeNanos;
 
@@ -257,74 +269,138 @@ const createRuntime = (
           message: `connection failed: ${messageOf(cause)}`,
         }),
     });
-    const initMs = round(nanosToMs((yield* Clock.monotonicTimeNanos) - initStarted));
+    const initMs = round(
+      nanosToMs((yield* Clock.monotonicTimeNanos) - initStarted),
+    );
+
+    return { db, conn, initMs, registered: new Set() };
+  });
+
+const ensureRuntime = (
+  env: Env,
+): Effect.Effect<Runtime, EngineInitError, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const existing = runtime;
+    if (Option.isSome(existing)) return existing.value;
+    const created = yield* createRuntime(env);
+    runtime = Option.some(created);
+    return created;
+  });
+
+interface FileLoad {
+  readonly loadMs: number;
+  /** Files that had to be fetched from R2 / the mirror this request. */
+  readonly fetched: number;
+}
+
+/** Register only the files the query reads and this database lacks. */
+const ensureFiles = (
+  env: Env,
+  rt: Runtime,
+  names: ReadonlyArray<string>,
+): Effect.Effect<FileLoad, DatasetLoadError, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const missing = Arr.filter(names, (name) => !rt.registered.has(name));
+    if (missing.length === 0) return { loadMs: 0, fetched: 0 };
 
     const prefix = env.DATASET_PREFIX ?? "datasets/tpch/0_01";
     const loadStarted = yield* Clock.monotonicTimeNanos;
     const loaded = yield* Effect.forEach(
-      TPCH.files,
-      (file) =>
+      missing,
+      (name) =>
         Effect.gen(function* () {
+          const file = yield* Option.match(
+            Arr.findFirst(TPCH.files, (candidate) => candidate.name === name),
+            {
+              onNone: () =>
+                Effect.fail(
+                  new DatasetLoadError({
+                    message: `unknown dataset file: ${name}`,
+                  }),
+                ),
+              onSome: (found) => Effect.succeed(found),
+            },
+          );
           const started = yield* Clock.monotonicTimeNanos;
           const entry = yield* loadFile(
             env,
             `${prefix}/${file.file}`,
             file.url,
           );
-          return {
-            file,
-            entry,
-            fetchMs: round(nanosToMs((yield* Clock.monotonicTimeNanos) - started)),
-          };
-        }),
-      { concurrency: LOAD_CONCURRENCY },
-    );
-
-    // Registration is ordered and serial: it is local, and a failure names the
-    // file that caused it rather than whichever promise rejected first.
-    const files = yield* Effect.forEach(
-      loaded,
-      ({ file, entry, fetchMs }) =>
-        Effect.gen(function* () {
+          // Emscripten's FS may retain the buffer, so hand it a copy:
+          // the cached bytes must survive for the next request.
           yield* Effect.tryPromise({
-            try: () => db.registerFileBuffer(file.name, entry.bytes),
+            try: () =>
+              rt.db.registerFileBuffer(file.name, new Uint8Array(entry.bytes)),
             catch: (cause) =>
               new DatasetLoadError({
                 message: `registering ${file.name} failed: ${messageOf(cause)}`,
               }),
           });
-          return new DatasetFileStatusSchema({
+          rt.registered.add(file.name);
+          const status = new DatasetFileStatusSchema({
             name: file.name,
             bytes: entry.bytes.byteLength,
             rows: file.rows,
             source: entry.source,
-            fetchMs,
+            fetchMs: round(
+              nanosToMs((yield* Clock.monotonicTimeNanos) - started),
+            ),
           });
+          loadedFiles.set(status.name, status);
+          return { source: entry.source };
         }),
-      { concurrency: 1 },
+      { concurrency: LOAD_CONCURRENCY },
     );
 
-    const loadMs = round(nanosToMs((yield* Clock.monotonicTimeNanos) - loadStarted));
+    const loadMs = round(
+      nanosToMs((yield* Clock.monotonicTimeNanos) - loadStarted),
+    );
     const loadedAt = yield* Clock.currentTimeMillis;
+    const statusFiles = Arr.fromIterable(loadedFiles.values());
+    lastDataset = Option.some(
+      new DatasetStatusSchema({
+        id: TPCH.id,
+        title: TPCH.title,
+        prefix,
+        files: statusFiles,
+        totalBytes: Arr.reduce(
+          statusFiles,
+          0,
+          (total, file) => total + file.bytes,
+        ),
+        totalRows: Arr.reduce(
+          statusFiles,
+          0,
+          (total, file) => total + file.rows,
+        ),
+        loadMs,
+        loadedAt,
+      }),
+    );
 
-    const dataset = new DatasetStatusSchema({
-      id: TPCH.id,
-      title: TPCH.title,
-      prefix,
-      files,
-      totalBytes: Arr.reduce(files, 0, (total, file) => total + file.bytes),
-      totalRows: Arr.reduce(files, 0, (total, file) => total + file.rows),
+    return {
       loadMs,
-      loadedAt,
-    });
-    yield* Effect.sync(() => {
-      lastDataset = Option.some(dataset);
-    });
-    return { db, conn, initMs, dataset };
+      fetched: Arr.reduce(
+        loaded,
+        0,
+        (count, entry) => (entry.source === "cache" ? count : count + 1),
+      ),
+    };
   });
 
 const resetRuntime = Effect.sync(() => {
+  Option.match(runtime, {
+    onNone: () => undefined,
+    onSome: (current) => {
+      current.conn.close();
+      current.db.close();
+      runtime = Option.none();
+    },
+  });
   lastDataset = Option.none();
+  loadedFiles.clear();
+  bytesCache.clear();
 });
 
 const runQuery = (
@@ -339,64 +415,54 @@ const runQuery = (
     });
 
     const startedAt = yield* Clock.monotonicTimeNanos;
+    const wasRunning = Option.isSome(runtime);
+    const rt = yield* ensureRuntime(env);
+    const loaded = yield* ensureFiles(env, rt, query.files);
 
-    return yield* Effect.acquireUseRelease(
-      createRuntime(env),
-      (rt) =>
-        Effect.gen(function* () {
-          const queryStarted = yield* Clock.monotonicTimeNanos;
-          const rawRows = yield* Effect.tryPromise({
-            try: () => rt.conn.query<Record<string, unknown>>(query.sql),
-            catch: (cause) => new QueryFailed({ id, message: messageOf(cause) }),
-          });
-          const queryMs = round(
-            nanosToMs((yield* Clock.monotonicTimeNanos) - queryStarted),
-          );
-          const totalMs = round(
-            nanosToMs((yield* Clock.monotonicTimeNanos) - startedAt),
-          );
-
-          const columns = Option.getOrElse(
-            Arr.head(rawRows).pipe(Option.map(R.keys)),
-            (): readonly string[] => [],
-          );
-          const rows = Arr.map(Arr.take(rawRows, MAX_ROWS), (row) =>
-            Arr.map(columns, (column) => toCell(row[column])),
-          );
-          const bytes = Arr.reduce(
-            rows,
-            0,
-            (total, row) =>
-              total +
-              Arr.reduce(row, 0, (sum, cell) => sum + approxCellBytes(cell)),
-          );
-
-          return new QueryRunSchema({
-            id: query.id,
-            title: query.title,
-            category: query.category,
-            columns,
-            rows,
-            rowCount: rawRows.length,
-            truncated: rawRows.length > MAX_ROWS,
-            metrics: new QueryMetricsSchema({
-              queryMs,
-              totalMs,
-              rows: rawRows.length,
-              bytes,
-              // Every request owns its database, so every run is cold.
-              warm: false,
-              initMs: rt.initMs,
-              loadMs: rt.dataset.loadMs,
-            }),
-          });
-        }),
-      (rt) =>
-        Effect.sync(() => {
-          rt.conn.close();
-          rt.db.close();
-        }),
+    const queryStarted = yield* Clock.monotonicTimeNanos;
+    const rawRows = yield* Effect.tryPromise({
+      try: () => rt.conn.query<Record<string, unknown>>(query.sql),
+      catch: (cause) => new QueryFailed({ id, message: messageOf(cause) }),
+    });
+    const queryMs = round(
+      nanosToMs((yield* Clock.monotonicTimeNanos) - queryStarted),
     );
+    const totalMs = round(
+      nanosToMs((yield* Clock.monotonicTimeNanos) - startedAt),
+    );
+
+    const columns = Option.getOrElse(
+      Arr.head(rawRows).pipe(Option.map(R.keys)),
+      (): readonly string[] => [],
+    );
+    const rows = Arr.map(Arr.take(rawRows, MAX_ROWS), (row) =>
+      Arr.map(columns, (column) => toCell(row[column])),
+    );
+    const bytes = Arr.reduce(
+      rows,
+      0,
+      (total, row) =>
+        total + Arr.reduce(row, 0, (sum, cell) => sum + approxCellBytes(cell)),
+    );
+
+    return new QueryRunSchema({
+      id: query.id,
+      title: query.title,
+      category: query.category,
+      columns,
+      rows,
+      rowCount: rawRows.length,
+      truncated: rawRows.length > MAX_ROWS,
+      metrics: new QueryMetricsSchema({
+        queryMs,
+        totalMs,
+        rows: rawRows.length,
+        bytes,
+        warm: wasRunning && loaded.fetched === 0,
+        initMs: wasRunning ? 0 : rt.initMs,
+        loadMs: loaded.loadMs,
+      }),
+    });
   }).pipe(
     Effect.timeoutOrElse({
       duration: Duration.seconds(25),

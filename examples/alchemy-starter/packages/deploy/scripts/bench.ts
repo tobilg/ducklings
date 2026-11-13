@@ -163,6 +163,12 @@ const program = Effect.gen(function* () {
   );
   yield* Console.log("");
   yield* Console.log(`wrote ${outPath}`);
+  if (process.env.STROBE === "1") {
+    yield* Console.log(`strobe:metric bench_total_ms=${report.totalMs}`);
+    yield* Console.log(
+      `strobe:metric fastest_median_ms=${Math.min(...report.queries.map((query) => query.medianMs))}`,
+    );
+  }
 });
 
 BunRuntime.runMain(

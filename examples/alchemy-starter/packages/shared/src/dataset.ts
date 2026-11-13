@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 
 /**
  * The dataset the lab benchmarks against. TPC-H at scale factor 0.01 is the
- * canonical DuckDB demo set: eight Parquet files, ~87k rows, small enough to
+ * canonical DuckDB demo set: five Parquet files, ~79k rows, small enough to
  * load in a Worker but wide enough to exercise scans, joins, windows and
  * Parquet metadata.
  *
@@ -45,15 +45,12 @@ export const TPCH = new DatasetDefinition({
   id: "tpch-sf0.01",
   title: "TPC-H · SF 0.01",
   description:
-    "The canonical DuckDB demo dataset — eight Parquet files covering customers, orders, line items, parts, suppliers and nations.",
+    "Five TPC-H SF 0.01 tables — the files the catalogue actually queries.",
   files: [
     file("customer", 1_500, "Customers and their market segment"),
     file("lineitem", 60_175, "Order line items — the largest table"),
-    file("nation", 25, "Nation lookup"),
     file("orders", 15_000, "Order headers"),
     file("part", 2_000, "Parts catalogue"),
-    file("partsupp", 8_000, "Part-supplier relationships"),
-    file("region", 5, "Region lookup"),
     file("supplier", 100, "Suppliers and account balances"),
   ],
 });
