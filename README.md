@@ -10,6 +10,7 @@ A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 |---------|-------------|---------|
 | [`@ducklings/browser`](https://www.npmjs.com/package/@ducklings/browser) | Browser version (async API) | `npm install @ducklings/browser` |
 | [`@ducklings/workers`](https://www.npmjs.com/package/@ducklings/workers) | Cloudflare Workers with httpfs and Parquet (async API) | `npm install @ducklings/workers` |
+| [`@ducklings/workers-lite`](https://www.npmjs.com/package/@ducklings/workers-lite) | Workers without Asyncify/httpfs — 25 MB WASM, faster cold start | `npm install @ducklings/workers-lite` |
 | [`@ducklings/workers-iceberg`](https://www.npmjs.com/package/@ducklings/workers-iceberg) | Cloudflare Workers with httpfs, Parquet, Avro, and Iceberg | `npm install @ducklings/workers-iceberg` |
 | [`@ducklings/workers-ducklake`](https://www.npmjs.com/package/@ducklings/workers-ducklake) | Cloudflare Workers version with DuckLake (async API) | `npm install @ducklings/workers-ducklake` |
 | [`@ducklings/workers-spatial`](https://www.npmjs.com/package/@ducklings/workers-spatial) | Cloudflare Workers build with Spatial, Parquet, and httpfs | `npm install @ducklings/workers-spatial` |
@@ -42,17 +43,17 @@ You can try the browser package in an example  at [https://ducklings-browser.gh.
 
 ## Extension Availability
 
-| Extension / Feature | `@ducklings/browser` | `@ducklings/workers` | `@ducklings/workers-iceberg` | `@ducklings/workers-ducklake` | `@ducklings/workers-spatial` |
-|---------------------|---------------------|---------------------|----------------------------|-----------------------------|----------------------------|
-| `parquet` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| `httpfs` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| `avro` | :x: | :x: | :white_check_mark: | :x: | :x: |
-| `iceberg` | :x: | :x: | :white_check_mark: | :x: | :x: |
-| `ducklake` | :x: | :x: | :x: | :white_check_mark: | :x: |
-| `spatial` | :x: | :x: | :x: | :x: | :white_check_mark: |
-| `json` | :x: | :x: | :x: | :x: | :x: |
+| Extension / Feature | `@ducklings/browser` | `@ducklings/workers` | `@ducklings/workers-lite` | `@ducklings/workers-iceberg` | `@ducklings/workers-ducklake` | `@ducklings/workers-spatial` |
+|---------------------|---------------------|---------------------|----------------------------|----------------------------|-----------------------------|----------------------------|
+| `parquet` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| `httpfs` | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| `avro` | :x: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| `iceberg` | :x: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| `ducklake` | :x: | :x: | :x: | :x: | :white_check_mark: | :x: |
+| `spatial` | :x: | :x: | :x: | :x: | :x: | :white_check_mark: |
+| `json` | :x: | :x: | :x: | :x: | :x: | :x: |
 
-The published browser and workers packages do not bundle DuckDB's `json` extension to keep builds small. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
+The published browser, workers, and workers-lite packages do not bundle DuckDB's `json` extension to keep builds small. JSON functions such as `json_extract(...)`, the `::JSON` type alias, and file readers like `read_json()` require a custom build with DuckDB's `json` extension enabled.
 
 ## Current Status
 
@@ -135,10 +136,13 @@ export default {
 
 **Why two packages?** Cloudflare Workers doesn't support synchronous XMLHttpRequest (browser-only API). The workers package uses Emscripten's Asyncify to enable async `fetch()` calls, making httpfs work properly. The async API means all query methods return Promises.
 
+`@ducklings/workers-lite` skips Asyncify and httpfs. It reuses the 25 MB browser WASM instead of the 51 MB Asyncify build, so an isolate starts roughly twice as fast. Use it when the application registers files itself (for example Parquet read through an R2 binding) and does not need DuckDB's httpfs.
+
 | Package | API Style | Size (gzipped) | Extension focus |
 |---------|-----------|----------------|-----------------|
 | `@ducklings/browser` | Async (Web Worker) | ~7.1 MiB | httpfs + Parquet |
 | `@ducklings/workers` | Async (Asyncify) | ~12.3 MiB | httpfs + Parquet |
+| `@ducklings/workers-lite` | Async (sync core) | ~7.4 MiB | Parquet only; 25 MB WASM |
 | `@ducklings/workers-iceberg` | Async (Asyncify) | ~13.4 MiB | httpfs + Parquet + Avro + Iceberg |
 | `@ducklings/workers-ducklake` | Async (Asyncify) | ~13.2 MiB | Workers + DuckLake |
 | `@ducklings/workers-spatial` | Async (Asyncify) | ~15.5 MiB | Workers + Spatial (GEOS + PROJ) |
@@ -630,7 +634,7 @@ make all
 # Build browser and all Workers WASM variants
 make duckdb-all
 
-# Build all five TypeScript packages
+# Build all six TypeScript packages
 make typescript-all
 
 # Individual steps
@@ -641,6 +645,7 @@ make duckdb-workers-ducklake # Compile DuckLake workers WASM with Asyncify
 make duckdb-workers-spatial # Compile Spatial workers WASM (GEOS + PROJ)
 make typescript-browser # Build @ducklings/browser package
 make typescript-workers # Build @ducklings/workers package
+make typescript-workers-lite # Build @ducklings/workers-lite package (needs duckdb-browser)
 make typescript-workers-iceberg # Build @ducklings/workers-iceberg package
 make typescript-workers-ducklake # Build @ducklings/workers-ducklake package
 make typescript-workers-spatial # Build @ducklings/workers-spatial package
@@ -733,8 +738,8 @@ All five packages use npm trusted publishing. Complete the [npm setup and initia
    rm -rf build/emscripten build/emscripten-spatial dist
    make duckdb-all
    make typescript-all
-   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake --filter @ducklings/workers-spatial -r typecheck
-   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake -r test
+   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-lite --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake --filter @ducklings/workers-spatial -r typecheck
+   pnpm --filter @ducklings/browser --filter @ducklings/workers --filter @ducklings/workers-lite --filter @ducklings/workers-iceberg --filter @ducklings/workers-ducklake -r test
    make check-worker-spatial-size
    pnpm --filter @ducklings/example-cloudflare-worker-spatial test
    ```
