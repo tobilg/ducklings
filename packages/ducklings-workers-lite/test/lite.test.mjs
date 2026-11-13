@@ -12,8 +12,28 @@ test('lite build answers a query', async () => {
   await init({ wasmModule });
   const db = new DuckDB();
   const conn = db.connect();
+
   const rows = await conn.query('SELECT 42 AS answer');
   assert.deepEqual(rows, [{ answer: 42 }]);
+
+  const text = await conn.query(
+    `SELECT
+       'short' AS a,
+       'a string long enough to live on the heap' AS b,
+       'héllo' AS c,
+       NULL::VARCHAR AS d,
+       '\\xDE\\xAD'::BLOB AS e`,
+  );
+  assert.deepEqual(text, [
+    {
+      a: 'short',
+      b: 'a string long enough to live on the heap',
+      c: 'héllo',
+      d: null,
+      e: '\\xDE\\xAD',
+    },
+  ]);
+
   conn.close();
   db.close();
 });

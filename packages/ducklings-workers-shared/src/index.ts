@@ -415,9 +415,7 @@ export interface InitOptions {
    * Asyncify build; `@ducklings/workers-lite` supplies the non-Asyncify
    * browser glue for apps that only read registered buffers.
    */
-  moduleFactory?: (
-    config: Record<string, unknown>,
-  ) => Promise<EmscriptenModule>;
+  moduleFactory?: (config: Record<string, unknown>) => Promise<EmscriptenModule>;
 }
 
 /**
@@ -464,8 +462,7 @@ export async function init(options: InitOptions): Promise<void> {
   initPromise = (async () => {
     // Default to the Asyncify Workers glue; lite supplies the browser glue.
     const DuckDBModule =
-      options.moduleFactory ??
-      (await import('./wasm/duckdb-workers.js')).default;
+      options.moduleFactory ?? (await import('./wasm/duckdb-workers.js')).default;
 
     // Initialize the Emscripten module with pre-compiled WASM
     const config: Record<string, unknown> = {
@@ -528,8 +525,7 @@ function readSignedHugeint(mod: EmscriptenModule, wordOffset: number): bigint {
 
 function readUnsignedHugeint(mod: EmscriptenModule, wordOffset: number): bigint {
   const low64 = readUnsignedInt64(mod, wordOffset);
-  const high64 =
-    (BigInt(mod.HEAPU32[wordOffset + 3]) << 32n) + BigInt(mod.HEAPU32[wordOffset + 2]);
+  const high64 = (BigInt(mod.HEAPU32[wordOffset + 3]) << 32n) + BigInt(mod.HEAPU32[wordOffset + 2]);
   return (high64 << 64n) + low64;
 }
 
@@ -561,6 +557,7 @@ function canDecodeRawColumnData(duckdbType: number): boolean {
     case DuckDBType.UHUGEINT:
     case DuckDBType.FLOAT:
     case DuckDBType.DOUBLE:
+    case DuckDBType.VARCHAR:
       return true;
     default:
       return false;
@@ -597,6 +594,13 @@ function readInlineOrHeapBytes(mod: EmscriptenModule, structPtr: number): Uint8A
 
 function readInlineOrHeapString(mod: EmscriptenModule, structPtr: number): string {
   return utf8Decoder.decode(readInlineOrHeapBytes(mod, structPtr));
+}
+
+/** The legacy `duckdb_column_data` API exposes VARCHAR as `char**`, not
+ *  `duckdb_string_t*` like a vector does. */
+function readResultString(mod: EmscriptenModule, dataPtr: number, rowIdx: number): string {
+  const strPtr = mod.HEAPU32[(dataPtr >> 2) + rowIdx];
+  return strPtr ? mod.UTF8ToString(strPtr) : '';
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -703,6 +707,17 @@ function readColumnData(
           result[i] = null;
         } else {
           result[i] = mod.HEAPU8[dataPtr + i] !== 0;
+        }
+      }
+      break;
+    }
+
+    case DuckDBType.VARCHAR: {
+      for (let i = 0; i < rowCount; i++) {
+        if (hasNullmask && mod.HEAPU8[nullmaskPtr + i]) {
+          result[i] = null;
+        } else {
+          result[i] = readResultString(mod, dataPtr, i);
         }
       }
       break;
@@ -1373,6 +1388,12 @@ export class DataChunk {
         }
         break;
 
+      case DuckDBType.VARCHAR:
+        for (let i = 0; i < rowCount; i++) {
+          result[i] = isRowNull(i) ? null : readInlineOrHeapString(mod, dataPtr + i * 16);
+        }
+        break;
+
       case DuckDBType.TINYINT:
         for (let i = 0; i < rowCount; i++) {
           result[i] = isRowNull(i) ? null : mod.HEAP8[dataPtr + i];
@@ -1501,7 +1522,7 @@ export class DataChunk {
           if (isRowNull(i)) {
             result[i] = null;
           } else {
-            result[i] = readInlineOrHeapString(mod, dataPtr + i * 16);
+            result[i] = readResultString(mod, dataPtr, i);
           }
         }
         break;
@@ -2137,6 +2158,17 @@ export class Connection {
     const hasNullmask = nullmaskPtr !== 0;
 
     switch (duckdbType) {
+      case DuckDBType.VARCHAR: {
+        for (let i = 0; i < rowCount; i++) {
+          if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
+            result[i] = null;
+          } else {
+            result[i] = readResultString(module, dataPtr, i);
+          }
+        }
+        break;
+      }
+
       case DuckDBType.BOOLEAN: {
         const boolPtr = dataPtr;
         for (let i = 0; i < rowCount; i++) {
@@ -2261,10 +2293,7 @@ export class Connection {
           if (hasNullmask && module.HEAPU8[nullmaskPtr + i]) {
             result[i] = null;
           } else {
-            result[i] = toSafeNumberOrString(
-              readUnsignedHugeint(module, offset + i * 4),
-              true,
-            );
+            result[i] = toSafeNumberOrString(readUnsignedHugeint(module, offset + i * 4), true);
           }
         }
         break;
