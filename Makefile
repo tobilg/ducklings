@@ -59,6 +59,7 @@ SYNC_VERSION_FILES := \
 	packages/ducklings-browser/package.json \
 	packages/ducklings-workers-shared/package.json \
 	packages/ducklings-workers/package.json \
+	packages/ducklings-workers-lite/package.json \
 	packages/ducklings-workers-iceberg/package.json \
 	packages/ducklings-workers-ducklake/package.json \
 	packages/ducklings-workers-spatial/package.json \
@@ -134,7 +135,7 @@ WORKERS_SPATIAL_PACKAGE_SOURCES := \
 	packages/ducklings-workers-spatial/tsup.config.ts \
 	$(PNPM_MANIFESTS)
 
-.PHONY: all clean rebuild deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-spatial duckdb-workers-all duckdb-all typescript typescript-browser typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-spatial typescript-workers-all typescript-all check-deps check-worker-ducklake-size check-worker-spatial-size show-versions example help
+.PHONY: all clean rebuild deps pin-versions sync-versions duckdb duckdb-browser duckdb-workers duckdb-workers-iceberg duckdb-workers-ducklake duckdb-workers-spatial duckdb-workers-all duckdb-all typescript typescript-browser typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-spatial typescript-workers-lite typescript-workers-all typescript-all check-deps check-worker-ducklake-size check-worker-spatial-size show-versions example help
 
 all: check-deps deps duckdb-all typescript-all
 
@@ -290,10 +291,13 @@ $(WORKERS_SPATIAL_PACKAGE_STAMP): $(SYNC_VERSIONS_STAMP) $(WORKERS_SPATIAL_WASM)
 	@test -f packages/ducklings-workers-spatial/dist/wasm/duckdb-workers.wasm
 	@touch $@
 
+typescript-workers-lite: duckdb-browser
+	cd packages/ducklings-workers-lite && pnpm build
+
 typescript-workers-all: typescript-workers typescript-workers-iceberg typescript-workers-ducklake typescript-workers-spatial
 
 # Build all TypeScript packages
-typescript-all: typescript-browser typescript-workers-all
+typescript-all: typescript-browser typescript-workers-all typescript-workers-lite
 
 check-worker-ducklake-size:
 	bash scripts/check-worker-size.sh packages/example-cloudflare-worker-ducklake
@@ -363,6 +367,7 @@ help:
 	@echo "  typescript-workers-iceberg - Build @ducklings/workers-iceberg package"
 	@echo "  typescript-workers-ducklake - Build @ducklings/workers-ducklake package"
 	@echo "  typescript-workers-spatial - Build @ducklings/workers-spatial package"
+	@echo "  typescript-workers-lite - Build @ducklings/workers-lite (non-Asyncify, Parquet only)"
 	@echo "  typescript-workers-all - Build default, Iceberg, DuckLake, and Spatial TypeScript packages"
 	@echo "  typescript-all     - Build all TypeScript packages"
 	@echo "  check-worker-ducklake-size - Check the DuckLake example Worker upload size"

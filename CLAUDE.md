@@ -12,12 +12,13 @@ A minimal DuckDB WASM build for browsers and Cloudflare Workers.
 
 ## Packages
 
-The project publishes five npm packages:
+The project publishes six npm packages:
 
 | Package | Description | API Style |
 |---------|-------------|-----------|
 | `@ducklings/browser` | Browser version (DuckDB runs in a Web Worker) | Async (Promises) |
 | `@ducklings/workers` | Default Cloudflare Workers package with httpfs and Parquet | Async (Promises) |
+| `@ducklings/workers-lite` | Workers without Asyncify/httpfs; 25 MB WASM, faster cold start | Async (Promises) |
 | `@ducklings/workers-iceberg` | Workers with httpfs, Parquet, Avro, and Iceberg | Async (Promises) |
 | `@ducklings/workers-ducklake` | Cloudflare Workers version with DuckLake | Async (Promises) |
 | `@ducklings/workers-spatial` | Cloudflare Workers version with Spatial, GEOS, and PROJ | Async (Promises) |
@@ -69,6 +70,7 @@ ducklings/
 │   ├── ducklings-browser/         # @ducklings/browser (npm)
 │   ├── ducklings-workers-shared/  # Shared Workers API source (private, not published)
 │   ├── ducklings-workers/         # @ducklings/workers (npm; default)
+│   ├── ducklings-workers-lite/    # @ducklings/workers-lite (npm; non-Asyncify)
 │   ├── ducklings-workers-iceberg/ # @ducklings/workers-iceberg (npm)
 │   ├── ducklings-workers-ducklake/ # @ducklings/workers-ducklake (npm)
 │   ├── ducklings-workers-spatial/ # @ducklings/workers-spatial (npm)
@@ -166,6 +168,7 @@ Checked against the [general Workers limits](https://developers.cloudflare.com/w
 - `packages/ducklings-browser/src/index.ts` - Browser API entry (async; main-thread classes in `src/async/`, Web Worker side in `src/worker/`)
 - `packages/ducklings-workers-shared/src/index.ts` - Shared Workers API implementation
 - `packages/ducklings-workers/src/index.ts` - @ducklings/workers package entry
+- `packages/ducklings-workers-lite/src/index.ts` - @ducklings/workers-lite package entry
 - `packages/ducklings-workers-iceberg/src/index.ts` - @ducklings/workers-iceberg package entry
 - `packages/ducklings-workers-ducklake/src/index.ts` - @ducklings/workers-ducklake package entry
 - `packages/ducklings-workers-spatial/tsup.config.ts` - @ducklings/workers-spatial builds directly from the shared entry (no own `src/index.ts`, no Vite plugin)

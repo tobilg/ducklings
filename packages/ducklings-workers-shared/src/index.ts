@@ -334,7 +334,7 @@ export interface ColumnInfo {
 }
 
 // Emscripten module interface
-interface EmscriptenModule {
+export interface EmscriptenModule {
   ccall: (
     name: string,
     returnType: string | null,
@@ -410,6 +410,14 @@ export interface InitOptions {
   wasmModule: WebAssembly.Module;
   /** Optional transport for httpfs requests; fixed for the module lifetime. */
   httpFetch?: (url: string, init: RequestInit) => Promise<Response>;
+  /**
+   * Optional Emscripten glue factory. The Workers package defaults to the
+   * Asyncify build; `@ducklings/workers-lite` supplies the non-Asyncify
+   * browser glue for apps that only read registered buffers.
+   */
+  moduleFactory?: (
+    config: Record<string, unknown>,
+  ) => Promise<EmscriptenModule>;
 }
 
 /**
@@ -454,8 +462,10 @@ export async function init(options: InitOptions): Promise<void> {
   }
 
   initPromise = (async () => {
-    // Dynamic import of the workers-specific Emscripten-generated JavaScript
-    const DuckDBModule = (await import('./wasm/duckdb-workers.js')).default;
+    // Default to the Asyncify Workers glue; lite supplies the browser glue.
+    const DuckDBModule =
+      options.moduleFactory ??
+      (await import('./wasm/duckdb-workers.js')).default;
 
     // Initialize the Emscripten module with pre-compiled WASM
     const config: Record<string, unknown> = {
